@@ -42,4 +42,4 @@ The deployment script deploys and binds both contracts, waits for finalized rece
 
 ## Readiness verdict
 
-Prototype logic and UI: ready for a controlled testnet demo; both contracts are deployed and wired on GenLayer Studio Network. Production or public financial use: not ready. The remaining gates are an accepted real or explicitly approved demo evidence source, public hosting at the frozen evidence URL, and one controlled Gold interval against the hosted source. See `docs/DEPLOYMENT.md` for the recorded addresses, receipts, and limitation.
+Prototype logic and UI: ready for a staged controlled testnet demo; both contracts are deployed and wired on GenLayer Studio Network, and the frozen evidence host is live. Production or public financial use: not ready. The remaining gates are an accepted real or explicitly approved demo evidence source and one controlled Gold interval against an exact future fixture. See `docs/DEPLOYMENT.md` for the recorded addresses, receipts, hosting verification, and limitation.

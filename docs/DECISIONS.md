@@ -16,4 +16,4 @@ Prices use six-decimal fixed-point integers. Stakes, fee amounts, pools, payouts
 
 ## Readiness boundary
 
-The contracts, direct tests, and Studio deployment are prototype-ready. Production or public launch remains blocked until the synthetic source is replaced or explicitly accepted for a demo, the public evidence host is deployed at the contract's frozen URL, and one controlled Gold interval is exercised against that hosted source.
+The contracts, direct tests, Studio deployment, and public evidence host are prototype-ready. Production or public launch remains blocked until the synthetic source is replaced or explicitly accepted for a demo and one controlled Gold interval is exercised against an exact future fixture at the hosted source.
