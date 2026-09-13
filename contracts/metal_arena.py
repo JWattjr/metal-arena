@@ -64,6 +64,9 @@ FEE_BPS = 200
 BPS_DENOMINATOR = 10_000
 PRICE_SCALE = 1_000_000
 DEMO_CREDITS = 1_000
+MAX_EVIDENCE_BODY_BYTES = 16_384
+MAX_EVIDENCE_PRICE = 10_000_000_000_000
+MAX_EVIDENCE_GAP_SECONDS = 3_600
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -91,9 +94,167 @@ PENDING_REASONS = (
     "SOURCE_UNAVAILABLE",
     "FIXTURE_NOT_FOUND",
     "MALFORMED_JSON",
+    "EVIDENCE_TOO_LARGE",
     "INVALID_SCHEMA",
     "CONFLICTING_EVIDENCE",
 )
+
+
+def _evidence_hash_payload(evidence: dict) -> dict:
+    return {
+        "closing_price": evidence["closing_price"],
+        "closing_timestamp": evidence["closing_timestamp"],
+        "currency": evidence["currency"],
+        "instrument": evidence["instrument"],
+        "market_id": evidence["market_id"],
+        "max_gap_seconds": evidence["max_gap_seconds"],
+        "metal": evidence["metal"],
+        "opening_price": evidence["opening_price"],
+        "opening_timestamp": evidence["opening_timestamp"],
+        "reason_code": evidence["reason_code"],
+        "schema_version": evidence["schema_version"],
+        "selection_rule": evidence["selection_rule"],
+        "source_id": evidence["source_id"],
+        "source_url": evidence["source_url"],
+        "status": evidence["status"],
+        "unit": evidence["unit"],
+    }
+
+
+def _sha256_text(value: str) -> str:
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _pending_evidence_for_context(context: dict, reason_code: str) -> dict:
+    if reason_code not in PENDING_REASONS:
+        reason_code = "INVALID_SCHEMA"
+    return {
+        "schema_version": EVIDENCE_SCHEMA_VERSION,
+        "status": "PENDING_EVIDENCE",
+        "market_id": context["market_id"],
+        "metal": context["metal"],
+        "instrument": context["instrument"],
+        "currency": context["currency"],
+        "unit": context["unit"],
+        "source_id": context["source_id"],
+        "source_url": context["evidence_url"],
+        "opening_timestamp": "",
+        "opening_price": 0,
+        "closing_timestamp": "",
+        "closing_price": 0,
+        "selection_rule": "exact_boundary_observation",
+        "max_gap_seconds": 0,
+        "evidence_hash": "",
+        "reason_code": reason_code,
+    }
+
+
+def _validate_evidence_payload(raw, context: dict) -> dict:
+    if not isinstance(raw, dict):
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence result must be an object")
+    keys = list(raw.keys())
+    if len(keys) != len(EVIDENCE_FIELDS):
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence result has missing or unexpected fields")
+    for field in EVIDENCE_FIELDS:
+        if field not in raw:
+            raise gl.vm.UserError(f"{ERROR_LLM} evidence result has missing or unexpected fields")
+
+    string_fields = (
+        "schema_version",
+        "status",
+        "market_id",
+        "metal",
+        "instrument",
+        "currency",
+        "unit",
+        "source_id",
+        "source_url",
+        "opening_timestamp",
+        "closing_timestamp",
+        "selection_rule",
+        "evidence_hash",
+        "reason_code",
+    )
+    for field in string_fields:
+        if not isinstance(raw[field], str) or len(raw[field]) > 2_048:
+            raise gl.vm.UserError(f"{ERROR_LLM} evidence field has invalid type or length")
+    for field in ("opening_price", "closing_price", "max_gap_seconds"):
+        if isinstance(raw[field], bool) or not isinstance(raw[field], int):
+            raise gl.vm.UserError(f"{ERROR_LLM} evidence numeric field has invalid type")
+    if raw["opening_price"] < 0 or raw["closing_price"] < 0:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence prices cannot be negative")
+    if raw["opening_price"] > MAX_EVIDENCE_PRICE or raw["closing_price"] > MAX_EVIDENCE_PRICE:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence price exceeds the accepted bound")
+    if raw["max_gap_seconds"] < 0 or raw["max_gap_seconds"] > MAX_EVIDENCE_GAP_SECONDS:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence gap exceeds the accepted bound")
+
+    if raw["schema_version"] != EVIDENCE_SCHEMA_VERSION:
+        raise gl.vm.UserError(f"{ERROR_LLM} unsupported evidence schema")
+    if raw["market_id"] != context["market_id"] or raw["metal"] != context["metal"]:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence market identity mismatch")
+    if raw["instrument"] != context["instrument"] or raw["currency"] != context["currency"]:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence instrument mismatch")
+    if raw["unit"] != context["unit"] or raw["source_id"] != context["source_id"]:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence unit or source mismatch")
+    if raw["source_url"] != context["evidence_url"]:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence URL is not frozen")
+    if raw["selection_rule"] != "exact_boundary_observation" or raw["max_gap_seconds"] != 0:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence selection rule mismatch")
+
+    if raw["status"] == "PENDING_EVIDENCE":
+        if raw["reason_code"] not in PENDING_REASONS:
+            raise gl.vm.UserError(f"{ERROR_LLM} invalid pending reason")
+        if raw["opening_timestamp"] != "" or raw["closing_timestamp"] != "":
+            raise gl.vm.UserError(f"{ERROR_LLM} pending evidence contains observations")
+        if raw["opening_price"] != 0 or raw["closing_price"] != 0 or raw["evidence_hash"] != "":
+            raise gl.vm.UserError(f"{ERROR_LLM} pending evidence contains prices")
+        return raw
+
+    if raw["status"] != "FINALIZED" or raw["reason_code"] != "NONE":
+        raise gl.vm.UserError(f"{ERROR_LLM} unsupported evidence status")
+    if raw["opening_timestamp"] != context["start_at"] or raw["closing_timestamp"] != context["end_at"]:
+        raise gl.vm.UserError(f"{ERROR_LLM} boundary timestamps are inconsistent")
+    if raw["opening_price"] <= 0 or raw["closing_price"] <= 0:
+        raise gl.vm.UserError(f"{ERROR_LLM} boundary prices must be positive")
+    if not raw["evidence_hash"].startswith("sha256:") or len(raw["evidence_hash"]) != 71:
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence hash is invalid")
+    for character in raw["evidence_hash"][7:]:
+        if character not in "0123456789abcdefABCDEF":
+            raise gl.vm.UserError(f"{ERROR_LLM} evidence hash is invalid")
+    expected_hash = _sha256_text(
+        json.dumps(_evidence_hash_payload(raw), sort_keys=True, separators=(",", ":"))
+    )
+    if raw["evidence_hash"].lower() != expected_hash.lower():
+        raise gl.vm.UserError(f"{ERROR_LLM} evidence hash does not bind the canonical payload")
+    return raw
+
+
+def _read_evidence_for_context(context: dict) -> dict:
+    try:
+        response = gl.nondet.web.get(context["evidence_url"])
+    except Exception:
+        return _pending_evidence_for_context(context, "SOURCE_UNAVAILABLE")
+    if response.status == 404:
+        return _pending_evidence_for_context(context, "FIXTURE_NOT_FOUND")
+    if response.status < 200 or response.status >= 300:
+        return _pending_evidence_for_context(context, "SOURCE_UNAVAILABLE")
+    try:
+        body = response.body
+        if isinstance(body, bytes):
+            if len(body) > MAX_EVIDENCE_BODY_BYTES:
+                return _pending_evidence_for_context(context, "EVIDENCE_TOO_LARGE")
+            body = body.decode("utf-8")
+        else:
+            body = str(body)
+            if len(body.encode("utf-8")) > MAX_EVIDENCE_BODY_BYTES:
+                return _pending_evidence_for_context(context, "EVIDENCE_TOO_LARGE")
+        parsed = json.loads(body)
+    except Exception:
+        return _pending_evidence_for_context(context, "MALFORMED_JSON")
+    try:
+        return _validate_evidence_payload(parsed, context)
+    except Exception:
+        return _pending_evidence_for_context(context, "INVALID_SCHEMA")
 
 
 @allow_storage
@@ -428,155 +589,39 @@ class MetalArena(gl.Contract):
     # Strict evidence schema and consensus boundary
     # ------------------------------------------------------------------
 
-    def _require_exact_fields(self, value, fields: tuple, label: str) -> None:
-        if not isinstance(value, dict):
-            raise gl.vm.UserError(f"{ERROR_LLM} {label} must be an object")
-        keys = list(value.keys())
-        if len(keys) != len(fields):
-            raise gl.vm.UserError(f"{ERROR_LLM} {label} has missing or unexpected fields")
-        for field in fields:
-            if field not in value:
-                raise gl.vm.UserError(f"{ERROR_LLM} {label} has missing or unexpected fields")
-
-    def _sha256(self, value: str) -> str:
-        return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-    def _evidence_hash_payload(self, evidence: dict) -> dict:
+    def _evidence_context(self, market: Market) -> dict:
+        # Copy ordinary values before entering a nondeterministic block.  The
+        # closures below must not capture this storage-backed Market or self.
         return {
-            "closing_price": evidence["closing_price"],
-            "closing_timestamp": evidence["closing_timestamp"],
-            "currency": evidence["currency"],
-            "instrument": evidence["instrument"],
-            "market_id": evidence["market_id"],
-            "max_gap_seconds": evidence["max_gap_seconds"],
-            "metal": evidence["metal"],
-            "opening_price": evidence["opening_price"],
-            "opening_timestamp": evidence["opening_timestamp"],
-            "reason_code": evidence["reason_code"],
-            "schema_version": evidence["schema_version"],
-            "selection_rule": evidence["selection_rule"],
-            "source_id": evidence["source_id"],
-            "source_url": evidence["source_url"],
-            "status": evidence["status"],
-            "unit": evidence["unit"],
-        }
-
-    def _pending_evidence(self, market: Market, reason_code: str) -> dict:
-        if reason_code not in PENDING_REASONS:
-            reason_code = "INVALID_SCHEMA"
-        return {
-            "schema_version": EVIDENCE_SCHEMA_VERSION,
-            "status": "PENDING_EVIDENCE",
             "market_id": market.market_id,
             "metal": market.metal,
             "instrument": market.instrument,
             "currency": market.currency,
             "unit": market.unit,
+            "start_at": market.start_at,
+            "end_at": market.end_at,
             "source_id": market.source_id,
-            "source_url": market.evidence_url,
-            "opening_timestamp": "",
-            "opening_price": 0,
-            "closing_timestamp": "",
-            "closing_price": 0,
-            "selection_rule": "exact_boundary_observation",
-            "max_gap_seconds": 0,
-            "evidence_hash": "",
-            "reason_code": reason_code,
+            "evidence_url": market.evidence_url,
         }
 
     def _validate_evidence_result(self, raw, market: Market) -> dict:
-        self._require_exact_fields(raw, EVIDENCE_FIELDS, "evidence result")
-        string_fields = (
-            "schema_version",
-            "status",
-            "market_id",
-            "metal",
-            "instrument",
-            "currency",
-            "unit",
-            "source_id",
-            "source_url",
-            "opening_timestamp",
-            "closing_timestamp",
-            "selection_rule",
-            "evidence_hash",
-            "reason_code",
-        )
-        for field in string_fields:
-            if not isinstance(raw[field], str):
-                raise gl.vm.UserError(f"{ERROR_LLM} evidence field has invalid type")
-        for field in ("opening_price", "closing_price", "max_gap_seconds"):
-            if isinstance(raw[field], bool) or not isinstance(raw[field], int):
-                raise gl.vm.UserError(f"{ERROR_LLM} evidence numeric field has invalid type")
-        if raw["schema_version"] != EVIDENCE_SCHEMA_VERSION:
-            raise gl.vm.UserError(f"{ERROR_LLM} unsupported evidence schema")
-        if raw["market_id"] != market.market_id or raw["metal"] != market.metal:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence market identity mismatch")
-        if raw["instrument"] != market.instrument or raw["currency"] != market.currency:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence instrument mismatch")
-        if raw["unit"] != market.unit or raw["source_id"] != market.source_id:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence unit or source mismatch")
-        if raw["source_url"] != market.evidence_url:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence URL is not frozen")
-        if raw["selection_rule"] != "exact_boundary_observation" or raw["max_gap_seconds"] != 0:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence selection rule mismatch")
-        if raw["status"] == "PENDING_EVIDENCE":
-            if raw["reason_code"] not in PENDING_REASONS:
-                raise gl.vm.UserError(f"{ERROR_LLM} invalid pending reason")
-            if raw["opening_timestamp"] != "" or raw["closing_timestamp"] != "":
-                raise gl.vm.UserError(f"{ERROR_LLM} pending evidence contains observations")
-            if raw["opening_price"] != 0 or raw["closing_price"] != 0 or raw["evidence_hash"] != "":
-                raise gl.vm.UserError(f"{ERROR_LLM} pending evidence contains prices")
-            return raw
-        if raw["status"] != "FINALIZED" or raw["reason_code"] != "NONE":
-            raise gl.vm.UserError(f"{ERROR_LLM} unsupported evidence status")
-        if raw["opening_timestamp"] != market.start_at or raw["closing_timestamp"] != market.end_at:
-            raise gl.vm.UserError(f"{ERROR_LLM} boundary timestamps are inconsistent")
-        if raw["opening_price"] <= 0 or raw["closing_price"] <= 0:
-            raise gl.vm.UserError(f"{ERROR_LLM} boundary prices must be positive")
-        if not raw["evidence_hash"].startswith("sha256:") or len(raw["evidence_hash"]) != 71:
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence hash is invalid")
-        for character in raw["evidence_hash"][7:]:
-            if character not in "0123456789abcdefABCDEF":
-                raise gl.vm.UserError(f"{ERROR_LLM} evidence hash is invalid")
-        expected_hash = self._sha256(
-            json.dumps(self._evidence_hash_payload(raw), sort_keys=True, separators=(",", ":"))
-        )
-        if raw["evidence_hash"].lower() != expected_hash.lower():
-            raise gl.vm.UserError(f"{ERROR_LLM} evidence hash does not bind the canonical payload")
-        return raw
+        return _validate_evidence_payload(raw, self._evidence_context(market))
 
     def _read_evidence(self, market: Market) -> dict:
-        try:
-            response = gl.nondet.web.get(market.evidence_url)
-        except Exception:
-            return self._pending_evidence(market, "SOURCE_UNAVAILABLE")
-        if response.status == 404:
-            return self._pending_evidence(market, "FIXTURE_NOT_FOUND")
-        if response.status < 200 or response.status >= 300:
-            return self._pending_evidence(market, "SOURCE_UNAVAILABLE")
-        try:
-            body = response.body
-            if isinstance(body, bytes):
-                body = body.decode("utf-8")
-            parsed = json.loads(str(body))
-        except Exception:
-            return self._pending_evidence(market, "MALFORMED_JSON")
-        try:
-            return self._validate_evidence_result(parsed, market)
-        except Exception:
-            return self._pending_evidence(market, "INVALID_SCHEMA")
+        return _read_evidence_for_context(self._evidence_context(market))
 
     def _consensus_evidence(self, market: Market) -> dict:
+        context = self._evidence_context(market)
+
         def leader_fn() -> dict:
-            return self._read_evidence(market)
+            return _read_evidence_for_context(context)
 
         def validator_fn(leader_result) -> bool:
             if not isinstance(leader_result, gl.vm.Return):
                 return False
             try:
-                leader = self._validate_evidence_result(leader_result.calldata, market)
-                validator = self._read_evidence(market)
+                leader = _validate_evidence_payload(leader_result.calldata, context)
+                validator = _read_evidence_for_context(context)
                 return leader == validator
             except Exception:
                 return False
@@ -587,7 +632,7 @@ class MetalArena(gl.Contract):
             # A validator disagreement is evidence failure, not a guessed
             # winner. Keep the market retryable and let the deadline refund
             # path resolve a source that never reaches agreement.
-            return self._pending_evidence(market, "CONFLICTING_EVIDENCE")
+            return _pending_evidence_for_context(context, "CONFLICTING_EVIDENCE")
 
     # ------------------------------------------------------------------
     # Configuration and market lifecycle
@@ -617,13 +662,13 @@ class MetalArena(gl.Contract):
         market_id = self._market_id(metal, start_at)
         self._validate_identifier(market_id, "market id", 96)
         self._validate_source_url(market_id, evidence_url)
-        if market_id in self.markets:
-            return market_id
         current_id = self.current_market_by_metal.get(metal, "")
         if current_id and current_id in self.markets:
             current = self.markets[current_id]
             if self._timestamp_to_epoch(now) < self._timestamp_to_epoch(current.end_at):
                 raise gl.vm.UserError(f"{ERROR_EXPECTED} an active market already exists for this metal")
+        if market_id in self.markets:
+            return market_id
         self.markets[market_id] = self._empty_market(market_id, metal, start_at, evidence_url)
         self.market_ids.append(market_id)
         self.current_market_by_metal[metal] = market_id
@@ -731,13 +776,30 @@ class MetalArena(gl.Contract):
         self.markets[market.market_id] = market
         self._emit_finality(market)
 
+    def _apply_deadline_refund(self, market: Market) -> None:
+        if market.outcome:
+            return
+        market.outcome = OUTCOME_REFUND
+        market.distributable_pool = market.total_staked
+        market.fee_amount = 0
+        market.last_reason_code = "SETTLEMENT_DEADLINE_REFUND"
+        market.settlement_state = SETTLEMENT_REFUND_PROVISIONAL
+        self.markets[market.market_id] = market
+        self._emit_finality(market)
+
     @gl.public.write
     def request_settlement(self, market_id: str) -> None:
         market = self._require_market(market_id)
         now = self._transaction_time()
-        if self._timestamp_to_epoch(now) < self._timestamp_to_epoch(market.end_at):
+        now_epoch = self._timestamp_to_epoch(now)
+        if now_epoch < self._timestamp_to_epoch(market.end_at):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} market has not ended")
         if market.outcome:
+            return
+        # The deadline refund wins deterministically over a late evidence
+        # request, regardless of which caller arrives first.
+        if now_epoch >= self._timestamp_to_epoch(market.settlement_deadline):
+            self._apply_deadline_refund(market)
             return
         if market.settlement_attempts >= MAX_SETTLEMENT_ATTEMPTS:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} settlement retry limit reached")
@@ -752,12 +814,22 @@ class MetalArena(gl.Contract):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} settlement deadline has not passed")
         if market.outcome:
             return
-        market.outcome = OUTCOME_REFUND
-        market.distributable_pool = market.total_staked
-        market.fee_amount = 0
-        market.last_reason_code = "SETTLEMENT_DEADLINE_REFUND"
-        market.settlement_state = SETTLEMENT_REFUND_PROVISIONAL
-        self.markets[market.market_id] = market
+        self._apply_deadline_refund(market)
+
+    @gl.public.write
+    def retry_finality(self, market_id: str) -> None:
+        market = self._require_market(market_id)
+        if not market.outcome:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} market is not settled")
+        if not self.finality_gate_configured:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} finality gate is not configured")
+        if self._market_finalized(market_id):
+            return
+        if market.settlement_state not in (SETTLEMENT_PROVISIONAL, SETTLEMENT_REFUND_PROVISIONAL):
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} settlement is not ready for finality")
+        # The gate authenticates the callback as coming from this arena and
+        # rejects any conflicting payload. Re-emitting the same payload is
+        # therefore safe, finality-gated, and idempotent.
         self._emit_finality(market)
 
     def _require_finality(self, market_id: str) -> None:
@@ -899,7 +971,39 @@ class MetalArena(gl.Contract):
         while index < end:
             result.append(self.market_ids[index])
             index += 1
-        return {"market_ids": result, "total": len(self.market_ids), "offset": offset, "limit": limit}
+        return {
+            "market_ids": result,
+            "total": len(self.market_ids),
+            "offset": offset,
+            "limit": limit,
+            "next_offset": end,
+            "has_more": end < len(self.market_ids),
+        }
+
+    @gl.public.view
+    def get_market_ids_for_metal(self, metal: str, offset: u256, limit: u256) -> dict:
+        if limit == 0 or limit > 50:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid market page limit")
+        metal = self._validate_metal(metal)
+        result = []
+        matching_total = 0
+        index = 0
+        while index < len(self.market_ids):
+            market_id = self.market_ids[index]
+            if self.markets[market_id].metal == metal:
+                if matching_total >= offset and len(result) < limit:
+                    result.append(market_id)
+                matching_total += 1
+            index += 1
+        next_offset = offset + len(result)
+        return {
+            "market_ids": result,
+            "total": matching_total,
+            "offset": offset,
+            "limit": limit,
+            "next_offset": next_offset,
+            "has_more": next_offset < matching_total,
+        }
 
     @gl.public.view
     def get_position(self, market_id: str, owner: Address, side: str) -> dict:
@@ -937,19 +1041,29 @@ class MetalArena(gl.Contract):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid position page limit")
         owner = self._normalize_address(owner)
         result = []
-        index = offset
-        scanned = 0
-        while index < len(self.market_ids) and scanned < limit:
+        total_positions = 0
+        collected = 0
+        index = 0
+        while index < len(self.market_ids):
             market_id = self.market_ids[index]
             for side in SIDES:
                 key = self._position_key(market_id, owner, side)
                 if key in self.positions:
-                    result.append(self._position_to_dict(self.positions[key]))
-                    scanned += 1
-                    if scanned >= limit:
-                        break
+                    if total_positions >= offset and collected < limit:
+                        result.append(self._position_to_dict(self.positions[key]))
+                        collected += 1
+                    total_positions += 1
             index += 1
-        return {"positions": result, "total_markets": len(self.market_ids), "offset": offset, "limit": limit}
+        next_offset = offset + collected
+        return {
+            "positions": result,
+            "total_markets": len(self.market_ids),
+            "total_positions": total_positions,
+            "offset": offset,
+            "limit": limit,
+            "next_offset": next_offset,
+            "has_more": next_offset < total_positions,
+        }
 
     @gl.public.view
     def get_account(self, owner: Address) -> dict:

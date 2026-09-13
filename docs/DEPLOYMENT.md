@@ -1,35 +1,73 @@
 # Deployment evidence
 
-## GenLayer Studio Network
+## Fresh GenLayer Studio Network release
 
-Deployment completed on 2026-09-13 at `2026-09-13T18:19:27.122Z` using the official GenLayer CLI and the configured active test account. Chain ID: `61999`. This is the final deployment after the validator-disagreement retry hardening.
+The bounded release was deployed on 2026-09-13 using the official GenLayer CLI and the active unlocked test account. Chain ID: `61999`. The deployment script waited for finalized receipts and checked successful contract execution for every step.
 
 | Contract | Address |
 | --- | --- |
-| SettlementGate | `0xe7C3784b337B5f68b622Eeadd7ba1f0dE535d580` |
-| MetalArena | `0x97A83ECBC86d277d3328973ed37367947De85418` |
+| SettlementFinalityGate | `0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254` |
+| MetalArena | `0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25` |
 
-Transactions:
+Deployment transactions:
 
-- SettlementGate deploy: `0x6e0dfa0533114275cfc906615cdb0b8c9e96c38816667d2018c2b118550d7441`
-- MetalArena deploy: `0x47ff7d4faa7a4ee21aa8edcea591c37bc728907b866fae279791ce72fa0cb44a`
-- Gate → arena binding: `0xe4b9a6747e56ffe8273b7dd1362fe07a80ef06e9150f1b28ce028bee6ea04f38`
-- Arena → gate binding: `0x709b5888a4429cfdc99d99134a015ba1115e5e714fe110597f7ad14ae3b29388`
+- Gate deploy: `0xa3a58d33201e71161b49339a0e1332d79c8394b01b62b3b778e00c947a4de41f`
+- Arena deploy: `0xddca3b8bcfd86e88200ddfdc5f02d89089276e37788bd234697ef5b8786355de`
+- Gate → arena binding: `0xa4f763ca80adbf7ebcf751b68b30145db4761db6af60c0e7c29196487f295e3f`
+- Arena → gate binding: `0x175fe625ce27ad5b7156244c38ccba32d5180af12e5d6052763589f58c73d39d`
 
-Read-back evidence after deployment:
+Deployment read-back returned `finality_gate_configured: true`, `market_seconds: 900`, `settlement_grace_seconds: 300`, `fee_bps: 200`, `price_scale: 1000000`, `source_id: metal-arena-synthetic-fixture-v1`, and `rule_version: synthetic-boundary-v1`. The generated record is also stored in [`deploy/last-deployment.json`](../deploy/last-deployment.json).
 
-- `MetalArena.get_protocol_config()` returned `finality_gate_configured: true`, `fee_bps: 200`, `market_seconds: 900`, `price_scale: 1000000`, and `rule_version: synthetic-boundary-v1`.
-- `SettlementGate.get_gate_status()` returned `arena_configured: true`, the arena address above, and `finalized_markets: 0`.
+## Public hosting
 
-## Hosting and settlement-source limitation
+The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). The final release deployment was `dpl_6mQPpfQPHtS5fvj2PzcwqAURM9Hr`, built successfully, returned HTTP 200, and rendered the synthetic evidence policy marker. The exact future fixture returned HTTP 200 at [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json).
 
-The frontend is published to the approved Vercel project at [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). Production deployment `dpl_8FcZ2dC8QU5sm2nPYCT4vyjqKMwA` built successfully, the page returned HTTP 200, and the synthetic evidence policy marker was present.
-
-The contract deliberately freezes evidence under `https://metal-arena.vercel.app/evidence/`. All four bundled fixtures returned HTTP 200 from the production domain with the hashes committed in `frontend/public/evidence/`:
+Fixture hashes currently covered by the repository tests:
 
 - Gold 00:00: `sha256:16f61ec634f7344b7a954a0784b2abacd64b15c8d7bc22159da86c06b93d71c2`
 - Gold 00:15: `sha256:c46c626150412cd51816ddbd04d561669d2a3980ce6ce73e3c5ea96728cf892a`
+- Gold 2026-09-13 20:00: `sha256:0490a4a26a45a26e5c76ecaba601d67608a24f758d765eb67893184517f55914`
 - Silver 00:00: `sha256:14d32c4feb44d262985e024c6616f155756293fc94949917a05580515f8879be`
 - Silver 00:15: `sha256:1d5eae412775e9d8f3805afee9078e775bddcd8088f9610f9b2281beb3b6668d`
 
-The remaining launch action is one controlled Gold interval end-to-end. The bundled examples are historical 2025 fixtures, while `open_next_market()` creates a current quarter-hour market id, so a live test requires provisioning an exact future fixture (or replacing the synthetic source) before the interval starts. No market was opened or funded against a mismatched source during this run.
+## Controlled Gold journey
+
+The journey used the actual unlocked StudioNet sender `0xdB433ff614bDD1ecE21Aa97221C3E0a7ecf79c92`. The CLI account display address differed in casing/derivation from the sender shown in receipts; all state and transaction evidence below uses the receipt sender.
+
+Market: `gold-2026-09-13-20-00-00Z`
+
+Interval: `2026-09-13T20:00:00Z` → `2026-09-13T20:15:00Z`
+
+Settlement deadline: `2026-09-13T20:20:00Z`
+
+Evidence: [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json)
+Evidence hash: `sha256:0490a4a26a45a26e5c76ecaba601d67608a24f758d765eb67893184517f55914`
+
+| Action | Receipt timestamp | Transaction | Result |
+| --- | --- | --- | --- |
+| Claim 1,000 demo credits | `2026-09-13T19:41:59Z` | `0xadc0dafa0e30cd767b4b54db8699861023c1e27a93bc590c1962297af421c569` | Finalized, execution succeeded |
+| Open next Gold market | `2026-09-13T19:45:29Z` | `0xbd443f93b1dfe92b06cd923bf2667101b8c7d815e933fcb280534e0e19aa097c` | Finalized, execution succeeded |
+| Stake UP 600 | `2026-09-13T19:46:09Z` | `0x954d2828305ffd65bb603e15123698def44e2bc3fa2e1b3462cfc51b8b559a51` | Finalized, execution succeeded |
+| Stake DOWN 400 | `2026-09-13T19:46:35Z` | `0x265dae73856032d2ade58ba2f4b07225905f76bef0ceace2faa9f8b05e6c3ace` | Finalized, execution succeeded |
+| Request settlement after expiry | `2026-09-13T20:15:51Z` | `0xf22b8e9404ea0eb9b237c1203084daeec1a0036b42186d75f4a8734b86051edc` | Finalized, validator consensus succeeded |
+| Claim UP payout | `2026-09-13T20:17:35Z` | `0x05f92b9a6a0b307838d212b0ccc73df4a63833c87ab1cd842295c3af36273b6a` | Finalized, execution succeeded |
+| Repeat UP claim | `2026-09-13T20:17:59Z` | `0x1108c3397fbf4a1f81f3aa1e3db4e30ddbd13ae762b51f520f73332b106c42a3` | Finalized rollback: `[EXPECTED] position already claimed` |
+
+Settlement read-back: opening `3360000000`, closing `3361000000`, outcome `UP`, total pool `1000`, fee `20`, distributable pool `980`, attempt `1`, evidence status `FINALIZED`. The gate read-back became `finalized:true` at `2026-09-13T20:16:28.213547Z` with the same outcome, pool, URL, and evidence hash. The safe finality retry path is implemented and covered by direct gate idempotence/conflict tests; it was not needed for this run because the callback arrived during bounded polling.
+
+Final account read-back: demo balance `980`, claimed payouts `980`, position count `2`. The UP position is claimed with payout `980`; the DOWN position remains separately represented with payout `0`.
+
+## Browser journey evidence
+
+The production page was opened in the Codex in-app browser after deployment. The settled read-only smoke showed:
+
+- `Synthetic evidence policy is active` and the configured `Testnet prototype` marker;
+- on-chain `Market history · 1` with a selectable Gold row for the exact 20:00 interval;
+- the Gold fixture source link, exact opening/closing observations, and `FINALIZED` finality;
+- `Unavailable · no transaction reference recorded` when no wallet session had locally recorded a transaction, rather than a preview placeholder on the deployed page.
+
+## Source assessment and readiness
+
+The source check was time-boxed. [LBMA Precious Metal Prices](https://www.lbma.org.uk/prices-and-data/lbma-precious-metal-prices) documents benchmark publication/access constraints and does not provide the exact public 15-minute historical feed required here. [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/) exposes gold/silver spot/history at daily, weekly, and monthly intervals and requires an API key. No suitable public, validator-accessible exact 15-minute historical source was found within the release window, so synthetic evidence remains explicit.
+
+Final verdict: **synthetic prototype YES; real-price trading ready NO**.

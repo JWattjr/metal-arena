@@ -36,6 +36,15 @@ export type MarketRecord = {
   created_at: string;
 };
 
+export type MarketPageRecord = {
+  market_ids: string[];
+  total: string | number | bigint;
+  offset: string | number | bigint;
+  limit: string | number | bigint;
+  next_offset: string | number | bigint;
+  has_more: boolean;
+};
+
 export type PositionRecord = {
   exists: boolean;
   market_id: string;
@@ -67,6 +76,16 @@ export type AccountRecord = {
   claimed_payouts: string | number | bigint;
 };
 
+export type PositionPageRecord = {
+  positions: PositionRecord[];
+  total_markets: string | number | bigint;
+  total_positions: string | number | bigint;
+  offset: string | number | bigint;
+  limit: string | number | bigint;
+  next_offset: string | number | bigint;
+  has_more: boolean;
+};
+
 export type ProtocolConfig = {
   fee_bps: string | number | bigint;
   fee_percent_display: string;
@@ -89,4 +108,9 @@ export type TxSnapshot = {
   execution: string;
   success: boolean;
   error?: string;
+  action?: string;
+  market_id?: string;
+  network?: string;
+  contract?: string;
+  updated_at?: string;
 };

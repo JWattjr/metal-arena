@@ -17,17 +17,22 @@ import {
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { formatAddress, useWallet } from "@/lib/genlayer/WalletProvider";
-import { isMetalArenaConfigured, MetalArenaClient } from "@/lib/metal/client";
+import { deploymentConfiguration, isMetalArenaConfigured, MetalArenaClient } from "@/lib/metal/client";
 import { estimatePayout } from "@/lib/metal/math";
 import type { AccountRecord, MarketRecord, Metal, PositionRecord, ProtocolConfig, QuoteRecord, Side, TxSnapshot } from "@/lib/metal/types";
 
 type Point = { time: string; value: number };
 type PreviewPools = { UP: number; DOWN: number };
 type UiMessage = { tone: "info" | "success" | "error" | "warning"; text: string } | null;
+
+const HISTORY_PAGE_SIZE = 6;
+const FINALITY_BACKOFF_MS = [2_000, 4_000, 8_000, 12_000, 20_000];
+const TX_STORAGE_KEY = "metal-arena:transaction-references:v1";
+const PREVIEW_REFERENCE_SECONDS = 1_735_689_600; // 2025-01-01T00:00:00Z; stable across SSR and hydration.
 
 const METALS: Record<Metal, { name: string; symbol: string; detail: string; source: string; accent: string }> = {
   GOLD: {
@@ -82,6 +87,67 @@ const HISTORICAL: Record<Metal, Array<{ id: string; interval: string; outcome: "
 
 function toIso(seconds: number) {
   return new Date(seconds * 1000).toISOString().slice(0, 19) + "Z";
+}
+
+function epochSeconds(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
+}
+
+function loadTransactionReferences(): TxSnapshot[] {
+  if (typeof window === "undefined") return [];
+  const deployment = deploymentConfiguration();
+  if (!deployment.configured) return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TX_STORAGE_KEY) || "{}");
+    const prefix = `${deployment.network}::${deployment.arenaAddress.toLowerCase()}::`;
+    return Object.entries(parsed as Record<string, TxSnapshot[]>)
+      .filter(([key]) => key.startsWith(prefix))
+      .flatMap(([, records]) => Array.isArray(records) ? records : []);
+  } catch {
+    return [];
+  }
+}
+
+function rememberTransactionReference(snapshot: TxSnapshot) {
+  if (typeof window === "undefined") return snapshot;
+  const deployment = deploymentConfiguration();
+  if (!deployment.configured) return snapshot;
+  const scopedMarket = snapshot.market_id || "account";
+  const scope = `${deployment.network}::${deployment.arenaAddress.toLowerCase()}::${scopedMarket}`;
+  const saved = {
+    ...snapshot,
+    network: deployment.network,
+    contract: deployment.arenaAddress,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TX_STORAGE_KEY) || "{}") as Record<string, TxSnapshot[]>;
+    const current = Array.isArray(parsed[scope]) ? parsed[scope] : [];
+    parsed[scope] = [...current.filter((item) => item.hash !== saved.hash), saved].slice(-12);
+    window.localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(parsed));
+  } catch {
+    // A storage-restricted browser should not block on-chain actions.
+  }
+  return saved;
+}
+
+function transactionForMarket(references: TxSnapshot[], marketId: string) {
+  const matching = references.filter((reference) => reference.market_id === marketId);
+  return matching[matching.length - 1] || null;
+}
+
+function mergeTransactionReference(references: TxSnapshot[], next: TxSnapshot) {
+  return [...references.filter((reference) => reference.hash !== next.hash), next].slice(-80);
+}
+
+function shortHash(hash: string) {
+  return hash.length > 18 ? `${hash.slice(0, 10)}…${hash.slice(-8)}` : hash;
+}
+
+function transactionHref(hash: string) {
+  const explorer = (process.env.NEXT_PUBLIC_GENLAYER_EXPLORER_URL || "").trim().replace(/\/$/, "");
+  return explorer ? `${explorer}/${hash}` : null;
 }
 
 function nextQuarter(seconds: number) {
@@ -174,7 +240,8 @@ function lifecycleStatus(market: MarketRecord | null, fallback: string) {
 }
 
 function previewMarket(metal: Metal, nowSeconds: number, pools: PreviewPools): MarketRecord {
-  const start = nextQuarter(nowSeconds || Math.floor(Date.now() / 1000));
+  const referenceSeconds = nowSeconds || PREVIEW_REFERENCE_SECONDS;
+  const start = nextQuarter(referenceSeconds);
   return {
     exists: true,
     market_id: `preview-${marketId(metal, start)}`,
@@ -303,9 +370,11 @@ function DemoBanner({ configured }: { configured: boolean }) {
 }
 
 function IntervalStrip({ market, nowSeconds }: { market: MarketRecord; nowSeconds: number }) {
-  const start = Math.floor(new Date(market.start_at).getTime() / 1000);
-  const end = Math.floor(new Date(market.end_at).getTime() / 1000);
-  const current = market.status === "UPCOMING" ? start : end;
+  const start = epochSeconds(market.start_at);
+  const end = epochSeconds(market.end_at);
+  const beforeStart = nowSeconds < start;
+  const afterEnd = nowSeconds >= end;
+  const current = beforeStart ? start : end;
   return (
     <div className="interval-strip">
       <div className="interval-side">
@@ -314,7 +383,7 @@ function IntervalStrip({ market, nowSeconds }: { market: MarketRecord; nowSecond
       </div>
       <div className="countdown" aria-live="polite">
         <strong>{countdown(current, nowSeconds)}</strong>
-        <span>{market.status === "UPCOMING" ? "to lock" : "to expiry"}</span>
+        <span>{beforeStart ? "to lock" : afterEnd ? "settlement window" : "to expiry"}</span>
       </div>
       <div className="interval-side">
         <span className="interval-label">Interval end</span>
@@ -408,6 +477,8 @@ function EntryPanel({
   onClaimCredits,
   onOpenMarket,
   onStake,
+  nowSeconds,
+  canOpenNext,
   busy,
   configured,
   connected,
@@ -424,6 +495,8 @@ function EntryPanel({
   onClaimCredits: () => void;
   onOpenMarket: () => void;
   onStake: () => void;
+  nowSeconds: number;
+  canOpenNext: boolean;
   busy: boolean;
   configured: boolean;
   connected: boolean;
@@ -436,7 +509,8 @@ function EntryPanel({
   const estimate = estimatePayout(upPool, downPool, selectedSide, amount);
   const balance = configured ? Number(integerValue(account?.demo_balance)) : previewBalance;
   const liveStatus = market ? market.status : "UNOPENED";
-  const entryOpen = liveStatus === "UPCOMING";
+  const start = market ? epochSeconds(market.start_at) : 0;
+  const entryOpen = liveStatus === "UPCOMING" && nowSeconds < start;
   const canStake = entryOpen && amount > 0 && amount <= balance && !busy;
   const canClaimCredits = !busy && (configured ? connected && !account?.demo_credits_claimed : true);
   return (
@@ -471,7 +545,7 @@ function EntryPanel({
           <button type="button" className={`primary-action ${METALS[metal].accent === "silver" ? "silver-action" : ""}`} onClick={onStake} disabled={!canStake}>{busy ? "Waiting…" : configured && !connected ? "Connect to enter" : `Stake ${selectedSide}`}</button>
           <button type="button" className="secondary-action" onClick={onClaimCredits} disabled={!canClaimCredits}>{configured && account?.demo_credits_claimed ? "Credits claimed" : "Get 1,000 credits"}</button>
         </div>
-        {!market ? <button type="button" className="ghost-action" style={{ width: "100%", marginTop: 10 }} onClick={onOpenMarket} disabled={busy}>{configured ? connected ? "Open next market" : "Connect to open market" : "Open preview market"}</button> : null}
+        {!market || canOpenNext ? <button type="button" className="ghost-action" style={{ width: "100%", marginTop: 10 }} onClick={onOpenMarket} disabled={busy}>{configured ? connected ? "Open next market" : "Connect to open market" : "Open preview market"}</button> : null}
         {message ? <div className={`action-message ${message.tone === "error" ? "error" : ""}`}><CircleAlert size={14} /><span>{message.text}</span></div> : null}
       </div>
       <div className="rail-section">
@@ -483,9 +557,70 @@ function EntryPanel({
   );
 }
 
-function EvidencePanel({ metal, market, protocol }: { metal: Metal; market: MarketRecord; protocol: ProtocolConfig | null }) {
-  const opening = market.opening_price ? price(market.opening_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
-  const closing = market.closing_price ? price(market.closing_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
+function SettlementControls({
+  market,
+  nowSeconds,
+  configured,
+  connected,
+  busy,
+  onSettle,
+  onRefund,
+  onRetryFinality,
+}: {
+  market: MarketRecord;
+  nowSeconds: number;
+  configured: boolean;
+  connected: boolean;
+  busy: boolean;
+  onSettle: (marketId: string) => void;
+  onRefund: (marketId: string) => void;
+  onRetryFinality: (marketId: string) => void;
+}) {
+  if (!configured) return null;
+  const end = epochSeconds(market.end_at);
+  const deadline = epochSeconds(market.settlement_deadline);
+  const settled = Boolean(market.outcome);
+  const attempts = Number(integerValue(market.settlement_attempts));
+  const canSettle = !settled && nowSeconds >= end && nowSeconds < deadline && attempts < 3;
+  const canRefund = !settled && nowSeconds >= deadline;
+  const canRetryFinality = settled && market.finality_status !== "FINALIZED";
+  const actionDisabled = !connected || busy;
+  const helper = settled
+    ? canRetryFinality ? "The settlement outcome is recorded; the finality callback is still pending." : "This market is protocol-finalized. Claims and refunds are now available from the positions panel."
+    : nowSeconds < end ? "Settlement opens after the interval ends."
+      : nowSeconds >= deadline ? "The deadline has passed, so this market resolves to a no-fee refund."
+        : market.last_reason_code ? `Evidence attempt ${attempts}/3 · ${statusLabel(market.last_reason_code)}.`
+          : `Evidence window · ${attempts}/3 attempts used.`;
+  return (
+    <div className="settlement-controls">
+      <div className="detail-line"><span><CircleHelp size={13} /> Settlement actions</span><StatusBadge value={market.finality_status === "FINALIZED" ? "FINALIZED" : market.outcome ? "AWAITING_FINALITY" : market.status} /></div>
+      <p className="settlement-helper">{helper}</p>
+      {canSettle ? <button type="button" className="secondary-action" onClick={() => onSettle(market.market_id)} disabled={actionDisabled}>{market.last_reason_code ? "Retry evidence" : "Request settlement"}</button> : null}
+      {canRefund ? <button type="button" className="secondary-action" onClick={() => onRefund(market.market_id)} disabled={actionDisabled}>Resolve as deadline refund</button> : null}
+      {canRetryFinality ? <button type="button" className="secondary-action" onClick={() => onRetryFinality(market.market_id)} disabled={actionDisabled}>Retry finality callback</button> : null}
+      {!connected && (canSettle || canRefund || canRetryFinality) ? <p className="settlement-helper">Connect the configured wallet to submit this transaction.</p> : null}
+    </div>
+  );
+}
+
+function TransactionValue({ reference, configured }: { reference: TxSnapshot | null; configured: boolean }) {
+  if (!reference) {
+    return <span className="hash-value">{configured ? "Unavailable · no transaction reference recorded" : "Preview only · no transaction submitted"}</span>;
+  }
+  const href = transactionHref(reference.hash);
+  const label = `${reference.action || "Transaction"} · ${shortHash(reference.hash)}`;
+  return href
+    ? <a className="hash-value" href={href} target="_blank" rel="noreferrer">{label} <ExternalLink size={11} /></a>
+    : <span className="hash-value">{label} · link unavailable</span>;
+}
+
+function EvidencePanel({ metal, market, protocol, configured, txReferences }: { metal: Metal; market: MarketRecord | null; protocol: ProtocolConfig | null; configured: boolean; txReferences: TxSnapshot[] }) {
+  if (!market) {
+    return <section className="panel full-width"><div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Public settlement record</div><span className="panel-label">select a market</span></div><div className="empty-state"><FileCheck2 size={18} /><h3>No on-chain market selected</h3><p>Open a market or choose one from the paginated history to inspect evidence and transaction references.</p></div></section>;
+  }
+  const opening = integerValue(market.opening_price) > 0n ? price(market.opening_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
+  const closing = integerValue(market.closing_price) > 0n ? price(market.closing_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
+  const marketTransaction = transactionForMarket(txReferences, market.market_id);
   return (
     <section className="panel full-width">
       <div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Public settlement record</div><span className="panel-label">validator evidence</span></div>
@@ -497,7 +632,7 @@ function EvidencePanel({ metal, market, protocol }: { metal: Metal; market: Mark
           <div className="detail-line"><span>Closing observation</span><span className="detail-value">{closing}{market.closing_timestamp ? ` · ${timestampLabel(market.closing_timestamp, true)} UTC` : ""}</span></div>
           <div className="detail-line"><span>Evidence source</span><span className="detail-value"><a href={market.evidence_url} target="_blank" rel="noreferrer">{market.source_id || protocol?.source_id || "Synthetic fixture"} <ExternalLink size={11} /></a></span></div>
           <div className="detail-line"><span>Selection rule</span><span className="detail-value">Exact boundary · max gap 0s</span></div>
-          <div className="detail-line"><span>Transaction hash</span><span className="hash-value">Not submitted in preview</span></div>
+          <div className="detail-line"><span>Transaction reference</span><TransactionValue reference={marketTransaction} configured={configured} /></div>
           <div className="detail-line"><span>Finality</span><span className={`detail-value ${market.finality_status === "FINALIZED" ? "green" : "cyan"}`}>{market.finality_status || "Not finalized"}</span></div>
         </div>
         <p className="evidence-copy"><strong>Why validators matter:</strong> each validator retrieves the same frozen URL and verifies metal, instrument, currency, unit, timestamps, source identity, and schema. The contract alone compares the accepted fixed-point prices and performs the fee, payout, and refund arithmetic.</p>
@@ -506,10 +641,49 @@ function EvidencePanel({ metal, market, protocol }: { metal: Metal; market: Mark
   );
 }
 
-function HistoryPanel({ metal }: { metal: Metal }) {
+function marketObservation(market: MarketRecord) {
+  const scale = Number(integerValue(market.price_scale)) || 1_000_000;
+  if (integerValue(market.opening_price) > 0n && integerValue(market.closing_price) > 0n) {
+    return `${price(market.opening_price, scale)} → ${price(market.closing_price, scale)}`;
+  }
+  if (market.outcome === "REFUND") return market.last_reason_code ? statusLabel(market.last_reason_code) : "Refunded market";
+  return market.settlement_state === "PENDING_EVIDENCE" ? "Evidence pending" : "Awaiting settlement";
+}
+
+function HistoryPanel({ metal, markets, selectedMarketId, offset, total, loading, error, onSelect, onPageChange }: {
+  metal: Metal;
+  markets: MarketRecord[];
+  selectedMarketId: string | null;
+  offset: number;
+  total: number;
+  loading: boolean;
+  error: string | null;
+  onSelect: (marketId: string) => void;
+  onPageChange: (offset: number) => void;
+}) {
+  const pageNumber = total === 0 ? 0 : Math.floor(offset / HISTORY_PAGE_SIZE) + 1;
+  const pageCount = total === 0 ? 0 : Math.ceil(total / HISTORY_PAGE_SIZE);
   return (
     <section className="panel">
-      <div className="panel-heading"><div className="panel-title"><Database size={16} /> Market history</div><span className="panel-label">fixtures only</span></div>
+      <div className="panel-heading"><div className="panel-title"><Database size={16} /> Market history</div><span className="panel-label">on-chain · {total}</span></div>
+      {loading ? <div className="empty-state"><RefreshCw size={18} className="spin" /><h3>Reading market index</h3><p>Loading the paginated history from MetalArena.</p></div> : error ? <div className="empty-state"><CircleAlert size={18} /><h3>History unavailable</h3><p>{error}</p></div> : markets.length === 0 ? <div className="empty-state"><Database size={18} /><h3>No on-chain {METALS[metal].name} markets yet</h3><p>Synthetic examples are shown separately below. Open the next aligned market from the entry panel when the contract permits it.</p></div> : <div className="history-list">
+        {markets.map((item) => (
+          <button type="button" className={`history-row history-select ${selectedMarketId === item.market_id ? "selected" : ""}`} key={item.market_id} onClick={() => onSelect(item.market_id)} aria-pressed={selectedMarketId === item.market_id}>
+            <span className="history-top"><span className="history-name">{METALS[metal].name} · {timestampLabel(item.start_at, true)} UTC</span><StatusBadge value={item.outcome || item.status} /></span>
+            <span className="history-sub">{marketObservation(item)} · {statusLabel(item.status || item.settlement_state)}</span>
+            <span className="history-meta"><span>{item.finality_status === "FINALIZED" ? "Finality recorded · selectable for claims" : "Select to inspect settlement state"}</span><span className="hash-value">{item.market_id}</span></span>
+          </button>
+        ))}
+      </div>}
+      {pageCount > 1 ? <div className="pagination-row"><button type="button" className="link-action" onClick={() => onPageChange(Math.max(0, offset - HISTORY_PAGE_SIZE))} disabled={loading || offset === 0}>Earlier</button><span>Page {pageNumber} / {pageCount}</span><button type="button" className="link-action" onClick={() => onPageChange(offset + HISTORY_PAGE_SIZE)} disabled={loading || offset + HISTORY_PAGE_SIZE >= total}>Newer</button></div> : null}
+    </section>
+  );
+}
+
+function SyntheticExamplesPanel({ metal }: { metal: Metal }) {
+  return (
+    <section className="panel">
+      <div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Synthetic examples</div><span className="panel-label">mechanics only</span></div>
       <div className="history-list">
         {HISTORICAL[metal].map((item) => (
           <div className="history-row" key={item.id}>
@@ -523,7 +697,10 @@ function HistoryPanel({ metal }: { metal: Metal }) {
   );
 }
 
-function PositionsPanel({ metal, market, positions, quotes, onClaim, configured, connected, busy }: { metal: Metal; market: MarketRecord; positions: Partial<Record<Side, PositionRecord | null>>; quotes: Partial<Record<Side, QuoteRecord | null>>; onClaim: (side: Side) => void; configured: boolean; connected: boolean; busy: boolean }) {
+function PositionsPanel({ metal, market, positions, quotes, onClaim, configured, connected, busy }: { metal: Metal; market: MarketRecord | null; positions: Partial<Record<Side, PositionRecord | null>>; quotes: Partial<Record<Side, QuoteRecord | null>>; onClaim: (marketId: string, side: Side) => void; configured: boolean; connected: boolean; busy: boolean }) {
+  if (!market) {
+    return <section className="panel"><div className="panel-heading"><div className="panel-title"><LockKeyhole size={16} /> My positions</div><span className="panel-label">{configured ? "contract read" : "preview state"}</span></div><div className="empty-state"><WalletCards size={18} /><h3>Select an on-chain market</h3><p>Positions are scoped to the market selected from the history index.</p></div></section>;
+  }
   const hasPosition = Boolean(positions.UP?.exists || positions.DOWN?.exists);
   return (
     <section className="panel">
@@ -532,8 +709,9 @@ function PositionsPanel({ metal, market, positions, quotes, onClaim, configured,
         {(["UP", "DOWN"] as Side[]).filter((side) => positions[side]?.exists).map((side) => {
           const position = positions[side]!;
           const quote = quotes[side];
-          const claimable = market.finality_status === "FINALIZED" && !position.claimed;
-          return <div className="position-row" key={side}><div className="position-line"><span className="position-name">{METALS[metal].name} / {side}</span><StatusBadge value={position.claimed ? "CLAIMED" : claimable ? "CLAIMABLE" : "AWAITING FINALITY"} /></div><div className="position-sub">Stake {credits(position.stake)} demo credits · entered {timestampLabel(position.entered_at, true)} UTC</div><div className="position-meta"><span>Quote {quote?.exists ? `${credits(quote.payout)} credits` : "pending"}</span><button type="button" className="link-action" onClick={() => onClaim(side)} disabled={!configured || !connected || busy || !claimable}>{position.claimed ? "Claimed" : claimable ? "Claim payout" : "Waiting for finality"}</button></div></div>;
+          const claimable = Boolean(market.outcome) && market.finality_status === "FINALIZED" && !position.claimed;
+          const actionLabel = position.claimed ? "Claimed" : claimable ? market.outcome === "REFUND" ? "Claim refund" : "Claim payout" : market.finality_status === "FINALIZED" ? "No payout" : "Waiting for finality";
+          return <div className="position-row" key={side}><div className="position-line"><span className="position-name">{METALS[metal].name} / {side}</span><StatusBadge value={position.claimed ? "CLAIMED" : claimable ? "CLAIMABLE" : "AWAITING FINALITY"} /></div><div className="position-sub">Stake {credits(position.stake)} demo credits · entered {timestampLabel(position.entered_at, true)} UTC</div><div className="position-meta"><span>Quote {quote?.exists ? `${credits(quote.payout)} credits` : "pending"}</span><button type="button" className="link-action" onClick={() => onClaim(market.market_id, side)} disabled={!configured || !connected || busy || !claimable}>{actionLabel}</button></div></div>;
         })}
       </div>}
     </section>
@@ -554,11 +732,20 @@ export default function Home() {
   const configured = isMetalArenaConfigured();
   const [metal, setMetal] = useState<Metal>("GOLD");
   const [clock, setClock] = useState(0);
-  const [market, setMarket] = useState<MarketRecord | null>(null);
+  const [currentMarket, setCurrentMarket] = useState<MarketRecord | null>(null);
+  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
+  const selectedMarketRef = useRef<string | null>(null);
+  const [selectedMarket, setSelectedMarket] = useState<MarketRecord | null>(null);
+  const [history, setHistory] = useState<MarketRecord[]>([]);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(configured);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountRecord | null>(null);
   const [protocol, setProtocol] = useState<ProtocolConfig | null>(null);
   const [positions, setPositions] = useState<Partial<Record<Side, PositionRecord | null>>>({});
   const [quotes, setQuotes] = useState<Partial<Record<Side, QuoteRecord | null>>>({});
+  const [previewMarketState, setPreviewMarketState] = useState<MarketRecord | null>(null);
   const [previewPools, setPreviewPools] = useState<PreviewPools>({ UP: 0, DOWN: 0 });
   const [previewBalance, setPreviewBalance] = useState(0);
   const [stakeAmount, setStakeAmount] = useState("25");
@@ -567,6 +754,7 @@ export default function Home() {
   const [loading, setLoading] = useState(configured);
   const [message, setMessage] = useState<UiMessage>(null);
   const [tx, setTx] = useState<TxSnapshot | null>(null);
+  const [txReferences, setTxReferences] = useState<TxSnapshot[]>([]);
 
   useEffect(() => {
     setClock(Math.floor(Date.now() / 1000));
@@ -574,57 +762,130 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setTxReferences(loadTransactionReferences());
+  }, [configured]);
+
+  const loadPositionState = useCallback(async (client: MetalArenaClient, nextMarket: MarketRecord | null) => {
+    if (!nextMarket || !wallet.address) {
+      setPositions({});
+      setQuotes({});
+      return;
+    }
+    const [up, down] = await Promise.all([
+      client.getPosition(nextMarket.market_id, wallet.address, "UP"),
+      client.getPosition(nextMarket.market_id, wallet.address, "DOWN"),
+    ]);
+    setPositions({ UP: up.exists ? up : null, DOWN: down.exists ? down : null });
+    if (up.exists || down.exists) {
+      const [upQuote, downQuote] = await Promise.all([
+        client.getQuote(nextMarket.market_id, wallet.address, "UP"),
+        client.getQuote(nextMarket.market_id, wallet.address, "DOWN"),
+      ]);
+      setQuotes({ UP: upQuote.exists ? upQuote : null, DOWN: downQuote.exists ? downQuote : null });
+    } else {
+      setQuotes({});
+    }
+  }, [wallet.address]);
+
   const refresh = useCallback(async () => {
     if (!configured) {
       setLoading(false);
+      setHistoryLoading(false);
       return;
     }
     setLoading(true);
+    setHistoryLoading(true);
+    setHistoryError(null);
     try {
       const client = new MetalArenaClient(wallet.address || undefined);
-      const [nextMarket, nextProtocol, nextAccount] = await Promise.all([
+      const [nextMarket, nextProtocol, nextAccount, historyPage] = await Promise.all([
         client.getMarket(metal),
         client.getProtocolConfig(),
         wallet.address ? client.getAccount(wallet.address) : Promise.resolve(null),
+        client.getMarketPage(metal, historyOffset, HISTORY_PAGE_SIZE),
       ]);
-      setMarket(nextMarket);
+      setCurrentMarket(nextMarket);
       setProtocol(nextProtocol);
       setAccount(nextAccount);
-      if (nextMarket && wallet.address) {
-        const [up, down] = await Promise.all([
-          client.getPosition(nextMarket.market_id, wallet.address, "UP"),
-          client.getPosition(nextMarket.market_id, wallet.address, "DOWN"),
-        ]);
-        setPositions({ UP: up.exists ? up : null, DOWN: down.exists ? down : null });
-        if (up.exists || down.exists) {
-          const [upQuote, downQuote] = await Promise.all([
-            client.getQuote(nextMarket.market_id, wallet.address, "UP"),
-            client.getQuote(nextMarket.market_id, wallet.address, "DOWN"),
-          ]);
-          setQuotes({ UP: upQuote.exists ? upQuote : null, DOWN: downQuote.exists ? downQuote : null });
-        }
-      } else {
-        setPositions({});
-        setQuotes({});
-      }
+      setHistory(historyPage.markets);
+      setHistoryTotal(Number(integerValue(historyPage.total)));
+      const preferredId = selectedMarketRef.current || nextMarket?.market_id || historyPage.markets[historyPage.markets.length - 1]?.market_id || null;
+      selectedMarketRef.current = preferredId;
+      setSelectedMarketId(preferredId);
+      const nextSelected = preferredId
+        ? nextMarket?.market_id === preferredId ? nextMarket : await client.getMarketById(preferredId)
+        : null;
+      setSelectedMarket(nextSelected);
+      await loadPositionState(client, nextSelected);
       setMessage(null);
     } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "The on-chain market index is temporarily unavailable.");
       setMessage({ tone: "warning", text: error instanceof Error ? error.message : "Contract reads are temporarily unavailable." });
     } finally {
       setLoading(false);
+      setHistoryLoading(false);
     }
-  }, [configured, metal, wallet.address]);
+  }, [configured, historyOffset, loadPositionState, metal, wallet.address]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const visibleMarket = market && !configured
-    ? { ...market, up_pool: previewPools.UP, down_pool: previewPools.DOWN, total_staked: previewPools.UP + previewPools.DOWN }
-    : market;
-  const effectiveMarket = visibleMarket || previewMarket(metal, clock, previewPools);
+  useEffect(() => {
+    if (!configured) return;
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [configured, refresh]);
 
-  const runContractAction = useCallback(async (label: string, action: (client: MetalArenaClient) => Promise<string>) => {
+  useEffect(() => {
+    if (configured && clock > 0 && clock % 900 === 0) void refresh();
+  }, [clock, configured, refresh]);
+
+  const selectMarket = useCallback(async (marketId: string) => {
+    selectedMarketRef.current = marketId;
+    setSelectedMarketId(marketId);
+    if (!configured) return;
+    setLoading(true);
+    try {
+      const client = new MetalArenaClient(wallet.address || undefined);
+      const nextSelected = await client.getMarketById(marketId);
+      setSelectedMarket(nextSelected);
+      await loadPositionState(client, nextSelected);
+      setMessage(null);
+    } catch (error) {
+      setMessage({ tone: "warning", text: error instanceof Error ? error.message : "The selected market is temporarily unavailable." });
+    } finally {
+      setLoading(false);
+    }
+  }, [configured, loadPositionState, wallet.address]);
+
+  const pollForFinality = useCallback(async (marketId: string) => {
+    if (!configured) return false;
+    for (const delay of FINALITY_BACKOFF_MS) {
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+      try {
+        const client = new MetalArenaClient(wallet.address || undefined);
+        const latest = await client.getMarketById(marketId);
+        setHistory((items) => items.map((item) => item.market_id === marketId ? latest : item));
+        if (selectedMarketRef.current === marketId) {
+          setSelectedMarket(latest);
+          await loadPositionState(client, latest);
+        }
+        if (currentMarket?.market_id === marketId) setCurrentMarket(latest);
+        if (latest.finality_status === "FINALIZED") {
+          await refresh();
+          return true;
+        }
+      } catch {
+        // The bounded loop tolerates a transient read failure without retrying forever.
+      }
+    }
+    await refresh();
+    return false;
+  }, [configured, currentMarket?.market_id, loadPositionState, refresh, wallet.address]);
+
+  const runContractAction = useCallback(async (label: string, action: (client: MetalArenaClient) => Promise<string>, marketId?: string, pollFinality = false) => {
     if (!wallet.address) {
       setMessage({ tone: "warning", text: "Connect a wallet before sending a contract transaction." });
       return;
@@ -638,13 +899,25 @@ export default function Home() {
     try {
       const client = new MetalArenaClient(wallet.address);
       const hash = await action(client);
-      setTx({ hash, status: "SUBMITTED", execution: "UNKNOWN", success: false });
+      const submitted = rememberTransactionReference({ hash, status: "SUBMITTED", execution: "UNKNOWN", success: false, action: label, ...(marketId ? { market_id: marketId } : {}) });
+      setTx(submitted);
+      setTxReferences((references) => mergeTransactionReference(references, submitted));
       const receipt = await client.waitForFinality(hash);
-      setTx(receipt);
-      if (!receipt.success) throw new Error(receipt.error || `The ${label.toLowerCase()} receipt finalized without successful contract execution.`);
+      let resolvedMarketId = marketId;
+      if (!resolvedMarketId && label === "Market open") {
+        resolvedMarketId = (await client.getMarket(metal))?.market_id;
+      }
+      const finalized = rememberTransactionReference({ ...receipt, action: label, ...(resolvedMarketId ? { market_id: resolvedMarketId } : {}) });
+      setTx(finalized);
+      setTxReferences((references) => mergeTransactionReference(references, finalized));
+      if (!finalized.success) throw new Error(finalized.error || `The ${label.toLowerCase()} receipt finalized without successful contract execution.`);
       setMessage({ tone: "success", text: `${label} finalized. State read-back is refreshing.` });
       toast.success(`${label} finalized`);
       await refresh();
+      if (pollFinality && resolvedMarketId) {
+        const finalizedGate = await pollForFinality(resolvedMarketId);
+        if (!finalizedGate) setMessage({ tone: "warning", text: `${label} finalized, but the gate callback is still pending. Retry finality from the selected market.` });
+      }
     } catch (error) {
       const text = error instanceof Error ? error.message : `${label} failed.`;
       setMessage({ tone: "error", text });
@@ -652,7 +925,7 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
-  }, [refresh, wallet.address, wallet.onGenLayer]);
+  }, [metal, pollForFinality, refresh, wallet.address, wallet.onGenLayer]);
 
   const onConnect = useCallback(() => {
     void wallet.connect().catch((error) => {
@@ -673,12 +946,20 @@ export default function Home() {
 
   const onOpenMarket = useCallback(() => {
     if (!configured) {
-      setMarket(previewMarket(metal, clock, previewPools));
+      setPreviewMarketState(previewMarket(metal, clock, previewPools));
       setMessage({ tone: "warning", text: "Preview market opened in memory. It has no authoritative ledger or settlement transaction." });
       return;
     }
+    selectedMarketRef.current = null;
+    setSelectedMarketId(null);
+    setSelectedMarket(null);
     void runContractAction("Market open", (client) => client.openNextMarket(metal));
   }, [clock, configured, metal, previewPools, runContractAction]);
+
+  const previewDisplayMarket = previewMarketState
+    ? { ...previewMarketState, up_pool: previewPools.UP, down_pool: previewPools.DOWN, total_staked: previewPools.UP + previewPools.DOWN }
+    : null;
+  const entryMarket = configured ? currentMarket : previewDisplayMarket;
 
   const onStake = useCallback(() => {
     const amount = safeAmount(stakeAmount);
@@ -696,28 +977,61 @@ export default function Home() {
       setMessage({ tone: "warning", text: `Preview stake drafted on ${selectedSide}. No contract transaction was submitted.` });
       return;
     }
-    if (!market) {
+    if (!entryMarket) {
       setMessage({ tone: "warning", text: "Open the next market before entering a position." });
       return;
     }
-    void runContractAction(`Stake ${selectedSide}`, (client) => client.placeStake(market.market_id, selectedSide, amount));
-  }, [configured, market, previewBalance, runContractAction, selectedSide, stakeAmount]);
+    if (clock >= epochSeconds(entryMarket.start_at)) {
+      setMessage({ tone: "warning", text: "This market is past its UTC cutoff. Refresh before entering another position." });
+      return;
+    }
+    void runContractAction(`Stake ${selectedSide}`, (client) => client.placeStake(entryMarket.market_id, selectedSide, amount), entryMarket.market_id);
+  }, [clock, configured, entryMarket, previewBalance, runContractAction, selectedSide, stakeAmount]);
 
-  const onClaim = useCallback((side: Side) => {
-    if (!configured || !market) return;
-    void runContractAction(`Claim ${side}`, (client) => client.claim(market.market_id, side));
-  }, [configured, market, runContractAction]);
+  const onClaim = useCallback((marketId: string, side: Side) => {
+    if (!configured) return;
+    void runContractAction(`Claim ${side}`, (client) => client.claim(marketId, side), marketId);
+  }, [configured, runContractAction]);
 
-  const status = lifecycleStatus(market, effectiveMarket.status);
+  const onSettle = useCallback((marketId: string) => {
+    void runContractAction("Settlement request", (client) => client.requestSettlement(marketId), marketId, true);
+  }, [runContractAction]);
+
+  const onRefund = useCallback((marketId: string) => {
+    void runContractAction("Deadline refund", (client) => client.requestRefund(marketId), marketId, true);
+  }, [runContractAction]);
+
+  const onRetryFinality = useCallback((marketId: string) => {
+    void runContractAction("Finality retry", (client) => client.retryFinality(marketId), marketId, true);
+  }, [runContractAction]);
+
+  const onMetalChange = useCallback((nextMetal: Metal) => {
+    setMetal(nextMetal);
+    selectedMarketRef.current = null;
+    setSelectedMarketId(null);
+    setSelectedMarket(null);
+    setCurrentMarket(null);
+    setHistory([]);
+    setHistoryOffset(0);
+    setHistoryTotal(0);
+    setPreviewMarketState(null);
+    setPreviewPools({ UP: 0, DOWN: 0 });
+    setMessage(null);
+  }, []);
+
+  const canOpenNext = configured && (!currentMarket || clock >= epochSeconds(currentMarket.end_at));
+  const effectiveMarket = entryMarket || previewMarket(metal, clock, previewPools);
+  const positionMarket = configured ? selectedMarket : previewDisplayMarket;
+  const evidenceMarket = positionMarket || (configured ? null : effectiveMarket);
+  const status = lifecycleStatus(positionMarket, configured ? "UNOPENED" : effectiveMarket.status);
   const balance = configured ? Number(integerValue(account?.demo_balance)) : previewBalance;
-  const currentSource = market?.evidence_url || effectiveMarket.evidence_url;
-  const positionMarket = visibleMarket || effectiveMarket;
+  const currentSource = positionMarket?.evidence_url || protocol?.source_base_url || effectiveMarket.evidence_url;
   const effectivePositions = configured ? positions : {};
   const effectiveQuotes = configured ? quotes : {};
 
   return (
     <div className="app-shell">
-      <Header metal={metal} setMetal={(next) => { setMetal(next); setMarket(null); setMessage(null); }} onConnect={onConnect} walletAddress={wallet.address} connected={wallet.connected} connecting={wallet.connecting} configured={configured} />
+      <Header metal={metal} setMetal={onMetalChange} onConnect={onConnect} walletAddress={wallet.address} connected={wallet.connected} connecting={wallet.connecting} configured={configured} />
       <main className="main-shell">
         <DemoBanner configured={configured} />
         <div className="heading-row">
@@ -748,7 +1062,7 @@ export default function Home() {
             </section>
           </div>
           <aside className="rail">
-            <EntryPanel metal={metal} market={visibleMarket} account={account} selectedSide={selectedSide} setSelectedSide={setSelectedSide} stakeAmount={stakeAmount} setStakeAmount={setStakeAmount} previewBalance={previewBalance} onClaimCredits={onClaimCredits} onOpenMarket={onOpenMarket} onStake={onStake} busy={busy} configured={configured} connected={wallet.connected} message={message} />
+            <EntryPanel metal={metal} market={entryMarket} account={account} selectedSide={selectedSide} setSelectedSide={setSelectedSide} stakeAmount={stakeAmount} setStakeAmount={setStakeAmount} previewBalance={previewBalance} onClaimCredits={onClaimCredits} onOpenMarket={onOpenMarket} onStake={onStake} nowSeconds={clock} canOpenNext={canOpenNext} busy={busy} configured={configured} connected={wallet.connected} message={message} />
             <section className="panel">
               <div className="panel-heading"><div className="panel-title"><Clock3 size={16} /> Time and source</div><span className="panel-label">UTC</span></div>
               <div className="panel-body">
@@ -759,12 +1073,14 @@ export default function Home() {
               </div>
               <Lifecycle status={status} />
             </section>
+            {selectedMarket ? <SettlementControls market={selectedMarket} nowSeconds={clock} configured={configured} connected={wallet.connected} busy={busy} onSettle={onSettle} onRefund={onRefund} onRetryFinality={onRetryFinality} /> : null}
           </aside>
         </div>
         <div className="lower-grid">
-          <HistoryPanel metal={metal} />
+          <HistoryPanel metal={metal} markets={history} selectedMarketId={selectedMarketId} offset={historyOffset} total={historyTotal} loading={historyLoading} error={historyError} onSelect={(marketId) => void selectMarket(marketId)} onPageChange={setHistoryOffset} />
+          <SyntheticExamplesPanel metal={metal} />
           <PositionsPanel metal={metal} market={positionMarket} positions={effectivePositions} quotes={effectiveQuotes} onClaim={onClaim} configured={configured} connected={wallet.connected} busy={busy} />
-          <EvidencePanel metal={metal} market={positionMarket} protocol={protocol} />
+          <EvidencePanel metal={metal} market={evidenceMarket} protocol={protocol} configured={configured} txReferences={txReferences} />
         </div>
         <AppFooter configured={configured} tx={tx} />
       </main>

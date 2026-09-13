@@ -16,7 +16,7 @@ import {
   getEthereumProvider,
   RPC_URL,
 } from "@/lib/genlayer/client";
-import type { AccountRecord, MarketRecord, Metal, PositionRecord, ProtocolConfig, QuoteRecord, Side, TxSnapshot } from "./types";
+import type { AccountRecord, MarketPageRecord, MarketRecord, Metal, PositionPageRecord, PositionRecord, ProtocolConfig, QuoteRecord, Side, TxSnapshot } from "./types";
 
 const ARENA_ADDRESS = (process.env.NEXT_PUBLIC_METAL_ARENA_ADDRESS || "").trim();
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
@@ -125,6 +125,16 @@ export class MetalArenaClient {
     return result.exists ? result : null;
   }
 
+  async getMarketById(marketId: string) {
+    return record<MarketRecord>(await this.read("get_market", [marketId]));
+  }
+
+  async getMarketPage(metal: Metal, offset = 0, limit = 6) {
+    const page = record<MarketPageRecord>(await this.read("get_market_ids_for_metal", [metal, BigInt(offset), BigInt(limit)]));
+    const markets = await Promise.all(page.market_ids.map((marketId) => this.getMarketById(marketId)));
+    return { ...page, markets };
+  }
+
   async getAccount(account: string) {
     return record<AccountRecord>(await this.read("get_account", [account as `0x${string}`]));
   }
@@ -135,6 +145,10 @@ export class MetalArenaClient {
 
   async getQuote(marketId: string, account: string, side: Side) {
     return record<QuoteRecord>(await this.read("get_claim_quote", [marketId, account as `0x${string}`, side]));
+  }
+
+  async getUserPositions(account: string, offset = 0, limit = 20) {
+    return record<PositionPageRecord>(await this.read("get_user_positions", [account as `0x${string}`, BigInt(offset), BigInt(limit)]));
   }
 
   async claimDemoCredits() {
@@ -155,6 +169,10 @@ export class MetalArenaClient {
 
   async requestRefund(marketId: string) {
     return this.write("refund_after_deadline", [marketId]);
+  }
+
+  async retryFinality(marketId: string) {
+    return this.write("retry_finality", [marketId]);
   }
 
   async claim(marketId: string, side: Side) {

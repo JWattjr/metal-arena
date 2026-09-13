@@ -19,6 +19,7 @@ def canonical_hash(record):
     [
         "gold-2025-01-01-00-00-00Z.json",
         "gold-2025-01-01-00-15-00Z.json",
+        "gold-2026-09-13-20-00-00Z.json",
         "silver-2025-01-01-00-00-00Z.json",
         "silver-2025-01-01-00-15-00Z.json",
     ],

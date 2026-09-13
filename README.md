@@ -1,6 +1,6 @@
 # MetalArena
 
-MetalArena is a compact GenLayer testnet prototype for 15-minute Gold and Silver UP/DOWN prediction markets. The interface is a dark settlement console: market clock and synthetic trace on the left, entry/pool state and evidence details on the right, then history, positions, and the public settlement record below.
+MetalArena is a compact GenLayer testnet prototype for 15-minute Gold and Silver UP/DOWN prediction markets. The interface is a dark settlement console: market clock and synthetic trace on the left, entry/pool state and evidence details on the right, then on-chain history, positions, and the public settlement record below.
 
 The core distinction is adjudication. The frontend never chooses a winner. After the exact interval ends, validators independently fetch the frozen evidence URL and verify a strict canonical record. The contract then performs deterministic fixed-point comparison and integer pool math. The separate `SettlementGate` contract records finality, and claims are rejected until that record exists.
 
@@ -22,14 +22,15 @@ To connect the app to a deployed contract, copy `.env.example` to `frontend/.env
 ## Verify
 
 ```powershell
-python -m pytest tests/direct/ -v
-python -m genvm_linter contracts/metal_arena.py --json
-python -m genvm_linter contracts/settlement_gate.py --json
+python -m pytest -v
+genvm-lint check contracts/metal_arena.py --json
+genvm-lint check contracts/settlement_gate.py --json
+npm run test:frontend
 npm run typecheck
 npm run build
 ```
 
-The direct suite covers UP, DOWN, equal-price refund, one-sided refund, cutoff rejection, missing evidence, conflicting timestamps, idempotent settlement, finality idempotency/conflict, and shared Silver metadata.
+The direct suite covers UP, DOWN, equal-price refund, one-sided refund, cutoff rejection, missing evidence, conflicting timestamps, idempotent settlement, finality idempotency/conflict, shared Silver metadata, position pagination within one market, filtered market history pagination, overlap prevention, post-deadline deterministic refund, bounded evidence bodies, and bounded evidence prices.
 
 ## Deploy
 
@@ -40,6 +41,13 @@ npm run deploy
 
 The deployment script deploys and binds both contracts, waits for finalized receipts, and writes `deploy/last-deployment.json` only after success. It prints `NEXT_PUBLIC_METAL_ARENA_ADDRESS`. No portal submission is performed by this repository.
 
+## Bounded release evidence
+
+The fresh StudioNet pair is recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The controlled Gold interval used the exact future fixture `gold-2026-09-13-20-00-00Z`, completed the real 20:00–20:15 UTC window, settled through validator consensus, passed the separate finality gate, paid the UP claim, and rejected a duplicate claim. The production console is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app).
+
 ## Readiness verdict
 
-Prototype logic and UI: ready for a staged controlled testnet demo; both contracts are deployed and wired on GenLayer Studio Network, and the frozen evidence host is live. Production or public financial use: not ready. The remaining gates are an accepted real or explicitly approved demo evidence source and one controlled Gold interval against an exact future fixture. See `docs/DEPLOYMENT.md` for the recorded addresses, receipts, hosting verification, and limitation.
+- Synthetic prototype: **YES** — fresh contracts, guarded lifecycle, on-chain paginated history, selectable historical positions, bounded settlement/finality polling, public fixture hosting, and a recorded full Gold journey are complete.
+- Real-price trading: **NO** — no suitable public, validator-accessible exact 15-minute historical source was found in the time-box, and the app remains explicitly synthetic.
+
+This is a testnet/demo-credit prototype, not financial advice or a production precious-metals venue.

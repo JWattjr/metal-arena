@@ -1134,6 +1134,25 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.history-select {
+  display: block;
+  width: 100%;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.history-select:hover,
+.history-select.selected {
+  background: rgba(119, 214, 208, 0.045);
+}
+
+.history-select.selected {
+  box-shadow: inset 2px 0 0 var(--cyan);
+}
+
 .history-row:last-child,
 .position-row:last-child {
   border-bottom: 0;
@@ -1154,6 +1173,7 @@ a {
 
 .history-sub,
 .position-sub {
+  display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 10px;
@@ -1223,6 +1243,45 @@ a {
   max-width: 44ch;
   margin: 0 auto;
   font-size: 11px;
+}
+
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 18px;
+  color: var(--muted-deep);
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlement-controls {
+  margin-top: 18px;
+  padding: 14px 16px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.settlement-controls .detail-line > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settlement-controls .secondary-action {
+  width: 100%;
+  margin-top: 9px;
+}
+
+.settlement-helper {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .skeleton {

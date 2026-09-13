@@ -2,7 +2,7 @@
 
 ## Runtime boundary
 
-The browser is an observer and transaction composer. It can display synthetic chart fixtures, read contract state, connect MetaMask, and wait for finalized receipts. It is never the source of truth for a balance, pool, outcome, payout, or settlement record.
+The browser is an observer and transaction composer. It can display synthetic chart fixtures, read contract state, connect MetaMask, and wait for finalized receipts. It is never the source of truth for a balance, pool, outcome, payout, or settlement record. Deployed transaction references are only a local convenience, keyed by network, arena contract, and market; missing local history is shown as unavailable rather than as a fake preview transaction.
 
 `MetalArena` stores the market lifecycle, pools, positions, and integer arithmetic. After the interval ends, `request_settlement` runs a GenLayer consensus boundary: the leader fetches the frozen evidence URL, every validator independently fetches and validates the same strict schema, and the result is accepted only when the validator comparison agrees.
 
@@ -24,6 +24,10 @@ UPCOMING → LIVE → AWAITING_SETTLEMENT
 ```
 
 Missing, malformed, contradictory, or unavailable evidence produces `PENDING_EVIDENCE` with a bounded retry count. If the deadline passes, the market refunds all stakes without charging a fee and still requires finality before claims.
+
+## History and lifecycle refresh
+
+`get_market_ids_for_metal` exposes bounded on-chain pages, and the browser fetches each returned market by ID so a past market can be selected after a newer market exists. `get_user_positions` paginates positions, not markets: both `UP` and `DOWN` positions in one market occupy separate entries, so a page boundary cannot silently skip the second side. The browser refreshes on a bounded interval and exactly at UTC quarter-hour boundaries. Settlement completion uses bounded finality polling; `retry_finality` safely re-emits the authenticated gate payload when the callback is delayed.
 
 ## Evidence policy
 

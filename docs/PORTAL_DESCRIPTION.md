@@ -2,8 +2,10 @@
 
 ## MetalArena
 
-MetalArena is a GenLayer testnet prototype for 15-minute Gold and Silver UP/DOWN markets. Traders choose a side before the exact UTC quarter-hour cutoff and join a two-sided pari-mutuel pool using demo credits. After expiry, GenLayer validators independently retrieve a frozen evidence record, verify the metal, instrument, currency, unit, timestamps, source, and schema, and the deterministic contract compares fixed-point prices to produce `UP`, `DOWN`, or `REFUND`. Claims are released only after the settlement finality gate records the finalized callback.
+MetalArena is a GenLayer StudioNet prototype for 15-minute Gold and Silver UP/DOWN markets. Traders choose a side before the exact UTC quarter-hour cutoff and join a two-sided pari-mutuel pool using demo credits. After expiry, GenLayer validators independently retrieve a frozen evidence record, verify the metal, instrument, currency, unit, timestamps, source, and schema, and the deterministic contract compares fixed-point prices to produce `UP`, `DOWN`, or `REFUND`. Claims are released only after the separate settlement finality gate records the finalized callback.
 
-The console is intentionally transparent about its current synthetic evidence policy. It shows the interval clock, pool estimates, lifecycle, evidence record, rounding/fee rules, position state, and finality status without fabricating live volume, traders, or profits.
+The console reads paginated market history from the contract, lets a user select past markets, reads both side-specific positions and claim quotes for that selected market, exposes guarded settlement/deadline-refund/finality-retry actions, and refreshes at ordinary intervals plus UTC quarter-hour boundaries. Transaction references are scoped to the configured network, arena contract, and market in local browser storage; a deployed market with no locally recorded reference is shown as unavailable rather than as a preview submission.
 
-This is a prototype with demo credits. It is not financial advice, a live precious-metals venue, or a production benchmark integration.
+The current source is intentionally synthetic public JSON fixtures, not live precious-metals data. The UI labels this policy, shows the exact evidence hash and source, and does not fabricate volume, trader counts, or profits. A full Gold testnet journey has been recorded: create, both-side stakes, real expiry, validator settlement, finality gate, payout claim, and duplicate-claim rejection.
+
+This is a demo-credit testnet prototype. It is not financial advice, a live precious-metals venue, or a production benchmark integration. Readiness verdict: synthetic prototype **YES**; real-price trading **NO**.
