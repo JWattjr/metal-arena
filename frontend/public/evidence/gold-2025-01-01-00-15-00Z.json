@@ -1,0 +1,19 @@
+{
+  "schema_version": "metal-arena-evidence-v1",
+  "status": "FINALIZED",
+  "market_id": "gold-2025-01-01-00-15-00Z",
+  "metal": "GOLD",
+  "instrument": "SYNTHETIC-XAUUSD-SPOT",
+  "currency": "USD",
+  "unit": "USD_PER_TROY_OUNCE",
+  "source_id": "metal-arena-synthetic-fixture-v1",
+  "source_url": "https://metal-arena.vercel.app/evidence/gold-2025-01-01-00-15-00Z.json",
+  "opening_timestamp": "2025-01-01T00:15:00Z",
+  "opening_price": 2101000000,
+  "closing_timestamp": "2025-01-01T00:30:00Z",
+  "closing_price": 2101000000,
+  "selection_rule": "exact_boundary_observation",
+  "max_gap_seconds": 0,
+  "evidence_hash": "sha256:c46c626150412cd51816ddbd04d561669d2a3980ce6ce73e3c5ea96728cf892a",
+  "reason_code": "NONE"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "metal-arena",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["frontend"],
+  "scripts": {
+    "dev": "npm --prefix frontend run dev --",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "lint": "npm --prefix frontend run lint",
+    "test:frontend": "node --experimental-strip-types --test tests/frontend/market-math.test.ts",
+    "test:contract": "pytest tests/direct/ -v",
+    "predeploy": "node scripts/clean-deploy-artifacts.mjs",
+    "deploy": "genlayer deploy"
+  },
+  "devDependencies": {
+    "genlayer-js": "^1.1.8"
+  },
+  "description": "MetalArena: synthetic-evidence GenLayer prediction markets for 15-minute metal intervals."
+}

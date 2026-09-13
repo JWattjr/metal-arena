@@ -1,0 +1,25 @@
+{
+  "network": "Genlayer Studio Network",
+  "deployedAt": "2026-09-13T18:19:27.122Z",
+  "settlementGateAddress": "0xe7C3784b337B5f68b622Eeadd7ba1f0dE535d580",
+  "metalArenaAddress": "0x97A83ECBC86d277d3328973ed37367947De85418",
+  "sourcePolicy": "metal-arena-synthetic-fixture-v1",
+  "deploymentTransactions": [
+    {
+      "label": "1/4 SettlementFinalityGate",
+      "hash": "0x6e0dfa0533114275cfc906615cdb0b8c9e96c38816667d2018c2b118550d7441"
+    },
+    {
+      "label": "2/4 MetalArena",
+      "hash": "0x47ff7d4faa7a4ee21aa8edcea591c37bc728907b866fae279791ce72fa0cb44a"
+    },
+    {
+      "label": "3/4 Bind gate → arena",
+      "hash": "0xe4b9a6747e56ffe8273b7dd1362fe07a80ef06e9150f1b28ce028bee6ea04f38"
+    },
+    {
+      "label": "4/4 Bind arena → gate",
+      "hash": "0x709b5888a4429cfdc99d99134a015ba1115e5e714fe110597f7ad14ae3b29388"
+    }
+  ]
+}

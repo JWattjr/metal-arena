@@ -1,0 +1,19 @@
+{
+  "schema_version": "metal-arena-evidence-v1",
+  "status": "FINALIZED",
+  "market_id": "silver-2025-01-01-00-15-00Z",
+  "metal": "SILVER",
+  "instrument": "SYNTHETIC-XAGUSD-SPOT",
+  "currency": "USD",
+  "unit": "USD_PER_TROY_OUNCE",
+  "source_id": "metal-arena-synthetic-fixture-v1",
+  "source_url": "https://metal-arena.vercel.app/evidence/silver-2025-01-01-00-15-00Z.json",
+  "opening_timestamp": "2025-01-01T00:15:00Z",
+  "opening_price": 29370000,
+  "closing_timestamp": "2025-01-01T00:30:00Z",
+  "closing_price": 29380000,
+  "selection_rule": "exact_boundary_observation",
+  "max_gap_seconds": 0,
+  "evidence_hash": "sha256:1d5eae412775e9d8f3805afee9078e775bddcd8088f9610f9b2281beb3b6668d",
+  "reason_code": "NONE"
+}
