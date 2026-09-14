@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { formatAddress, useWallet } from "@/lib/genlayer/WalletProvider";
 import { deploymentConfiguration, isMetalArenaConfigured, MetalArenaClient } from "@/lib/metal/client";
 import { estimatePayout } from "@/lib/metal/math";
-import type { AccountRecord, MarketRecord, Metal, PositionRecord, ProtocolConfig, QuoteRecord, Side, TxSnapshot } from "@/lib/metal/types";
+import type { AccountRecord, MarketRecord, Metal, PositionRecord, ProtocolConfig, PublicProofManifest, QuoteRecord, Side, TxSnapshot } from "@/lib/metal/types";
 
 type Point = { time: string; value: number };
 type PreviewPools = { UP: number; DOWN: number };
@@ -33,6 +33,10 @@ const HISTORY_PAGE_SIZE = 6;
 const FINALITY_BACKOFF_MS = [2_000, 4_000, 8_000, 12_000, 20_000];
 const TX_STORAGE_KEY = "metal-arena:transaction-references:v1";
 const PREVIEW_REFERENCE_SECONDS = 1_735_689_600; // 2025-01-01T00:00:00Z; stable across SSR and hydration.
+const COMPLETED_CASE_ID = "gold-2026-09-13-20-00-00Z";
+const COMPLETED_CASE_PATH = `/?case=${COMPLETED_CASE_ID}`;
+const PUBLIC_PROOF_PATH = "/evidence/metal-arena-gold-case.json";
+const STABLE_MARKET_ID = /^(gold|silver)-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}Z$/;
 
 const METALS: Record<Metal, { name: string; symbol: string; detail: string; source: string; accent: string }> = {
   GOLD: {
@@ -148,6 +152,10 @@ function shortHash(hash: string) {
 function transactionHref(hash: string) {
   const explorer = (process.env.NEXT_PUBLIC_GENLAYER_EXPLORER_URL || "").trim().replace(/\/$/, "");
   return explorer ? `${explorer}/${hash}` : null;
+}
+
+function isStableMarketId(value: string | null): value is string {
+  return Boolean(value && STABLE_MARKET_ID.test(value));
 }
 
 function nextQuarter(seconds: number) {
@@ -363,7 +371,8 @@ function DemoBanner({ configured }: { configured: boolean }) {
       <Info size={16} />
       <div>
         <strong>{configured ? "Synthetic evidence policy is active" : "Synthetic evidence preview"}</strong>
-        <p>{configured ? "This deployment uses public historical fixtures, not live metal prices. A real-price source remains blocked by licensing, key, and intraday-history constraints." : "No MetalArena contract is configured in this build. Controls below are an in-memory preview only; no ledger, balance, settlement, or transaction is being simulated as final."}</p>
+        <p>{configured ? "This deployment uses public predetermined fixtures, not live metal prices. The completed Gold case is the supported proof path; new intervals are not opened without matching evidence." : "No MetalArena contract is configured in this build. Controls below are an in-memory preview only; no ledger, balance, settlement, or transaction is being simulated as final."}</p>
+        <div className="demo-links"><a href={COMPLETED_CASE_PATH}>Open completed Gold case <ExternalLink size={11} /></a><a href={PUBLIC_PROOF_PATH} target="_blank" rel="noreferrer">Public proof manifest <ExternalLink size={11} /></a></div>
       </div>
     </div>
   );
@@ -523,7 +532,7 @@ function EntryPanel({
         <StatusBadge value={market ? liveStatus : "UNOPENED"} tone={market ? undefined : "amber"} />
       </div>
       <p className="entry-copy">Will this benchmark finish above its exact opening observation? Pick a side before the UTC quarter-hour cutoff.</p>
-      {market ? <div className="pool-table"><PoolRow side="UP" amount={upPool} total={upPool + downPool} /><PoolRow side="DOWN" amount={downPool} total={upPool + downPool} /></div> : <div className="empty-state"><Clock3 size={18} /><h3>No upcoming market is open</h3><p>Open the next aligned quarter-hour from the deployed contract.</p></div>}
+      {market ? <div className="pool-table"><PoolRow side="UP" amount={upPool} total={upPool + downPool} /><PoolRow side="DOWN" amount={downPool} total={upPool + downPool} /></div> : <div className="empty-state"><Clock3 size={18} /><h3>No supported new market is open</h3><p>Use the completed Gold case to inspect the verified mechanics. A new interval requires matching evidence to be published first.</p></div>}
       <div className="entry-controls">
         <label className="control-label" htmlFor="side-select">Prediction position</label>
         <div className="choice-row" id="side-select">
@@ -545,7 +554,7 @@ function EntryPanel({
           <button type="button" className={`primary-action ${METALS[metal].accent === "silver" ? "silver-action" : ""}`} onClick={onStake} disabled={!canStake}>{busy ? "Waiting…" : configured && !connected ? "Connect to enter" : `Stake ${selectedSide}`}</button>
           <button type="button" className="secondary-action" onClick={onClaimCredits} disabled={!canClaimCredits}>{configured && account?.demo_credits_claimed ? "Credits claimed" : "Get 1,000 credits"}</button>
         </div>
-        {!market || canOpenNext ? <button type="button" className="ghost-action" style={{ width: "100%", marginTop: 10 }} onClick={onOpenMarket} disabled={busy}>{configured ? connected ? "Open next market" : "Connect to open market" : "Open preview market"}</button> : null}
+        {!configured && (!market || canOpenNext) ? <button type="button" className="ghost-action" style={{ width: "100%", marginTop: 10 }} onClick={onOpenMarket} disabled={busy}>Open preview market</button> : null}
         {message ? <div className={`action-message ${message.tone === "error" ? "error" : ""}`}><CircleAlert size={14} /><span>{message.text}</span></div> : null}
       </div>
       <div className="rail-section">
@@ -614,7 +623,24 @@ function TransactionValue({ reference, configured }: { reference: TxSnapshot | n
     : <span className="hash-value">{label} · link unavailable</span>;
 }
 
-function EvidencePanel({ metal, market, protocol, configured, txReferences }: { metal: Metal; market: MarketRecord | null; protocol: ProtocolConfig | null; configured: boolean; txReferences: TxSnapshot[] }) {
+function PublicProofLinks({ proof, proofError, marketId }: { proof: PublicProofManifest | null; proofError: string | null; marketId: string }) {
+  if (!proof || proof.market_id !== marketId) {
+    return <div className="public-proof"><div className="detail-line"><span>Verified public proof</span><span className="detail-value muted">{proofError || "This deployment manifest covers the completed Gold case."}</span></div><a className="case-link" href={COMPLETED_CASE_PATH}>Open completed Gold case <ExternalLink size={11} /></a></div>;
+  }
+  const links = proof.transactions.filter((item) => item.market_id === marketId && !item.action.startsWith("Open") && !item.action.startsWith("Stake") && item.action !== "Claim demo credits");
+  return (
+    <div className="public-proof">
+      <div className="detail-line"><span>Verified public proof</span><span className="detail-value green">Deployment-scoped manifest</span></div>
+      <div className="proof-links">
+        {links.map((item) => <a key={item.hash} href={item.url} target="_blank" rel="noreferrer">{item.action} · {shortHash(item.hash)} <ExternalLink size={11} /></a>)}
+      </div>
+      <p className="evidence-copy">These links are public receipt evidence for this deployment and market. They are independent of browser-local transaction history.</p>
+      <a className="case-link" href={proof.manifest_url} target="_blank" rel="noreferrer">Open full proof manifest <ExternalLink size={11} /></a>
+    </div>
+  );
+}
+
+function EvidencePanel({ metal, market, protocol, configured, txReferences, proof, proofError }: { metal: Metal; market: MarketRecord | null; protocol: ProtocolConfig | null; configured: boolean; txReferences: TxSnapshot[]; proof: PublicProofManifest | null; proofError: string | null }) {
   if (!market) {
     return <section className="panel full-width"><div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Public settlement record</div><span className="panel-label">select a market</span></div><div className="empty-state"><FileCheck2 size={18} /><h3>No on-chain market selected</h3><p>Open a market or choose one from the paginated history to inspect evidence and transaction references.</p></div></section>;
   }
@@ -632,9 +658,10 @@ function EvidencePanel({ metal, market, protocol, configured, txReferences }: { 
           <div className="detail-line"><span>Closing observation</span><span className="detail-value">{closing}{market.closing_timestamp ? ` · ${timestampLabel(market.closing_timestamp, true)} UTC` : ""}</span></div>
           <div className="detail-line"><span>Evidence source</span><span className="detail-value"><a href={market.evidence_url} target="_blank" rel="noreferrer">{market.source_id || protocol?.source_id || "Synthetic fixture"} <ExternalLink size={11} /></a></span></div>
           <div className="detail-line"><span>Selection rule</span><span className="detail-value">Exact boundary · max gap 0s</span></div>
-          <div className="detail-line"><span>Transaction reference</span><TransactionValue reference={marketTransaction} configured={configured} /></div>
+          <div className="detail-line"><span>Browser-local transaction reference</span><TransactionValue reference={marketTransaction} configured={configured} /></div>
           <div className="detail-line"><span>Finality</span><span className={`detail-value ${market.finality_status === "FINALIZED" ? "green" : "cyan"}`}>{market.finality_status || "Not finalized"}</span></div>
         </div>
+        <PublicProofLinks proof={proof} proofError={proofError} marketId={market.market_id} />
         <p className="evidence-copy"><strong>Why validators matter:</strong> each validator retrieves the same frozen URL and verifies metal, instrument, currency, unit, timestamps, source identity, and schema. The contract alone compares the accepted fixed-point prices and performs the fee, payout, and refund arithmetic.</p>
       </div>
     </section>
@@ -666,7 +693,7 @@ function HistoryPanel({ metal, markets, selectedMarketId, offset, total, loading
   return (
     <section className="panel">
       <div className="panel-heading"><div className="panel-title"><Database size={16} /> Market history</div><span className="panel-label">on-chain · {total}</span></div>
-      {loading ? <div className="empty-state"><RefreshCw size={18} className="spin" /><h3>Reading market index</h3><p>Loading the paginated history from MetalArena.</p></div> : error ? <div className="empty-state"><CircleAlert size={18} /><h3>History unavailable</h3><p>{error}</p></div> : markets.length === 0 ? <div className="empty-state"><Database size={18} /><h3>No on-chain {METALS[metal].name} markets yet</h3><p>Synthetic examples are shown separately below. Open the next aligned market from the entry panel when the contract permits it.</p></div> : <div className="history-list">
+      {loading ? <div className="empty-state"><RefreshCw size={18} className="spin" /><h3>Reading market index</h3><p>Loading the paginated history from MetalArena.</p></div> : error ? <div className="empty-state"><CircleAlert size={18} /><h3>History unavailable</h3><p>{error}</p></div> : markets.length === 0 ? <div className="empty-state"><Database size={18} /><h3>No on-chain {METALS[metal].name} markets yet</h3><p>Synthetic examples are shown separately. New intervals stay unavailable until matching evidence is published. <a href={COMPLETED_CASE_PATH}>Open the completed Gold case.</a></p></div> : <div className="history-list">
         {markets.map((item) => (
           <button type="button" className={`history-row history-select ${selectedMarketId === item.market_id ? "selected" : ""}`} key={item.market_id} onClick={() => onSelect(item.market_id)} aria-pressed={selectedMarketId === item.market_id}>
             <span className="history-top"><span className="history-name">{METALS[metal].name} · {timestampLabel(item.start_at, true)} UTC</span><StatusBadge value={item.outcome || item.status} /></span>
@@ -755,11 +782,40 @@ export default function Home() {
   const [message, setMessage] = useState<UiMessage>(null);
   const [tx, setTx] = useState<TxSnapshot | null>(null);
   const [txReferences, setTxReferences] = useState<TxSnapshot[]>([]);
+  const [proof, setProof] = useState<PublicProofManifest | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
 
   useEffect(() => {
     setClock(Math.floor(Date.now() / 1000));
     const timer = window.setInterval(() => setClock(Math.floor(Date.now() / 1000)), 1_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requested = new URLSearchParams(window.location.search).get("case");
+    if (isStableMarketId(requested)) {
+      selectedMarketRef.current = requested;
+      setSelectedMarketId(requested);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(PUBLIC_PROOF_PATH, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Public proof manifest returned HTTP ${response.status}.`);
+        return response.json() as Promise<PublicProofManifest>;
+      })
+      .then((manifest) => {
+        if (!cancelled) setProof(manifest);
+      })
+      .catch((error) => {
+        if (!cancelled) setProofError(error instanceof Error ? error.message : "Public proof manifest unavailable.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -1019,7 +1075,7 @@ export default function Home() {
     setMessage(null);
   }, []);
 
-  const canOpenNext = configured && (!currentMarket || clock >= epochSeconds(currentMarket.end_at));
+  const canOpenNext = !configured && (!currentMarket || clock >= epochSeconds(currentMarket.end_at));
   const effectiveMarket = entryMarket || previewMarket(metal, clock, previewPools);
   const positionMarket = configured ? selectedMarket : previewDisplayMarket;
   const evidenceMarket = positionMarket || (configured ? null : effectiveMarket);
@@ -1080,7 +1136,7 @@ export default function Home() {
           <HistoryPanel metal={metal} markets={history} selectedMarketId={selectedMarketId} offset={historyOffset} total={historyTotal} loading={historyLoading} error={historyError} onSelect={(marketId) => void selectMarket(marketId)} onPageChange={setHistoryOffset} />
           <SyntheticExamplesPanel metal={metal} />
           <PositionsPanel metal={metal} market={positionMarket} positions={effectivePositions} quotes={effectiveQuotes} onClaim={onClaim} configured={configured} connected={wallet.connected} busy={busy} />
-          <EvidencePanel metal={metal} market={evidenceMarket} protocol={protocol} configured={configured} txReferences={txReferences} />
+          <EvidencePanel metal={metal} market={evidenceMarket} protocol={protocol} configured={configured} txReferences={txReferences} proof={proof} proofError={proofError} />
         </div>
         <AppFooter configured={configured} tx={tx} />
       </main>

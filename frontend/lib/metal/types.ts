@@ -114,3 +114,56 @@ export type TxSnapshot = {
   contract?: string;
   updated_at?: string;
 };
+
+export type VerifiedProofTransaction = {
+  action: string;
+  hash: string;
+  url: string;
+  contract: string;
+  market_id?: string;
+  status: string;
+  execution: string;
+  result: string;
+  note?: string;
+};
+
+export type PublicProofManifest = {
+  schema_version: string;
+  manifest_id: string;
+  verified_at: string;
+  network: string;
+  chain_id: string | number;
+  rpc_url: string;
+  explorer_base_url: string;
+  case_url: string;
+  manifest_url: string;
+  arena_address: string;
+  finality_gate_address: string;
+  market_id: string;
+  market: {
+    metal: Metal;
+    instrument: string;
+    source_id: string;
+    evidence_url: string;
+    evidence_hash: string;
+    start_at: string;
+    end_at: string;
+    settlement_deadline: string;
+    opening_price: string | number;
+    closing_price: string | number;
+    price_scale: string | number;
+    outcome: string;
+    finality_status: string;
+  };
+  accounting: {
+    up_pool: string | number;
+    down_pool: string | number;
+    total_staked: string | number;
+    fee_amount: string | number;
+    distributable_pool: string | number;
+    claimed_payout: string | number;
+    final_demo_balance: string | number;
+    position_count: string | number;
+  };
+  transactions: VerifiedProofTransaction[];
+};

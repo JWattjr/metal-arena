@@ -1,0 +1,185 @@
+{
+  "schema_version": "metal-arena-public-proof-v1",
+  "manifest_id": "metal-arena-studionet-gold-2026-09-13-20-00-00Z",
+  "verified_at": "2026-09-14",
+  "network": "GenLayer StudioNet",
+  "chain_id": 61999,
+  "rpc_url": "https://studio.genlayer.com/api",
+  "explorer_base_url": "https://explorer-studio.genlayer.com/tx/",
+  "case_url": "https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z",
+  "manifest_url": "https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json",
+  "arena_address": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+  "finality_gate_address": "0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254",
+  "market_id": "gold-2026-09-13-20-00-00Z",
+  "market": {
+    "metal": "GOLD",
+    "instrument": "SYNTHETIC-XAUUSD-SPOT",
+    "source_id": "metal-arena-synthetic-fixture-v1",
+    "evidence_url": "https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json",
+    "evidence_hash": "sha256:0490a4a26a45a26e5c76ecaba601d67608a24f758d765eb67893184517f55914",
+    "start_at": "2026-09-13T20:00:00Z",
+    "end_at": "2026-09-13T20:15:00Z",
+    "settlement_deadline": "2026-09-13T20:20:00Z",
+    "opening_price": 3360000000,
+    "closing_price": 3361000000,
+    "price_scale": 1000000,
+    "outcome": "UP",
+    "finality_status": "FINALIZED",
+    "settlement_state": "SETTLED_PROVISIONAL",
+    "settlement_attempts": 1,
+    "finalized_at": "2026-09-13T20:16:28.213547Z"
+  },
+  "accounting": {
+    "up_pool": 600,
+    "down_pool": 400,
+    "total_staked": 1000,
+    "fee_amount": 20,
+    "distributable_pool": 980,
+    "claimed_payout": 980,
+    "final_demo_balance": 980,
+    "position_count": 2
+  },
+  "transactions": [
+    {
+      "action": "Deploy SettlementFinalityGate",
+      "hash": "0xa3a58d33201e71161b49339a0e1332d79c8394b01b62b3b778e00c947a4de41f",
+      "url": "https://explorer-studio.genlayer.com/tx/0xa3a58d33201e71161b49339a0e1332d79c8394b01b62b3b778e00c947a4de41f",
+      "contract": "0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Deploy MetalArena",
+      "hash": "0xddca3b8bcfd86e88200ddfdc5f02d89089276e37788bd234697ef5b8786355de",
+      "url": "https://explorer-studio.genlayer.com/tx/0xddca3b8bcfd86e88200ddfdc5f02d89089276e37788bd234697ef5b8786355de",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Bind finality gate",
+      "hash": "0xa4f763ca80adbf7ebcf751b68b30145db4761db6af60c0e7c29196487f295e3f",
+      "url": "https://explorer-studio.genlayer.com/tx/0xa4f763ca80adbf7ebcf751b68b30145db4761db6af60c0e7c29196487f295e3f",
+      "contract": "0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Bind arena finality gate",
+      "hash": "0x175fe625ce27ad5b7156244c38ccba32d5180af12e5d6052763589f58c73d39d",
+      "url": "https://explorer-studio.genlayer.com/tx/0x175fe625ce27ad5b7156244c38ccba32d5180af12e5d6052763589f58c73d39d",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Claim demo credits",
+      "hash": "0xadc0dafa0e30cd767b4b54db8699861023c1e27a93bc590c1962297af421c569",
+      "url": "https://explorer-studio.genlayer.com/tx/0xadc0dafa0e30cd767b4b54db8699861023c1e27a93bc590c1962297af421c569",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Open Gold market",
+      "hash": "0xbd443f93b1dfe92b06cd923bf2667101b8c7d815e933fcb280534e0e19aa097c",
+      "url": "https://explorer-studio.genlayer.com/tx/0xbd443f93b1dfe92b06cd923bf2667101b8c7d815e933fcb280534e0e19aa097c",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Stake UP 600",
+      "hash": "0x954d2828305ffd65bb603e15123698def44e2bc3fa2e1b3462cfc51b8b559a51",
+      "url": "https://explorer-studio.genlayer.com/tx/0x954d2828305ffd65bb603e15123698def44e2bc3fa2e1b3462cfc51b8b559a51",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Stake DOWN 400",
+      "hash": "0x265dae73856032d2ade58ba2f4b07225905f76bef0ceace2faa9f8b05e6c3ace",
+      "url": "https://explorer-studio.genlayer.com/tx/0x265dae73856032d2ade58ba2f4b07225905f76bef0ceace2faa9f8b05e6c3ace",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE"
+    },
+    {
+      "action": "Request settlement",
+      "hash": "0xf22b8e9404ea0eb9b237c1203084daeec1a0036b42186d75f4a8734b86051edc",
+      "url": "https://explorer-studio.genlayer.com/tx/0xf22b8e9404ea0eb9b237c1203084daeec1a0036b42186d75f4a8734b86051edc",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE",
+      "note": "Validator consensus accepted the exact synthetic evidence payload and emitted the finality callback."
+    },
+    {
+      "action": "Claim UP payout",
+      "hash": "0x05f92b9a6a0b307838d212b0ccc73df4a63833c87ab1cd842295c3af36273b6a",
+      "url": "https://explorer-studio.genlayer.com/tx/0x05f92b9a6a0b307838d212b0ccc73df4a63833c87ab1cd842295c3af36273b6a",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "SUCCESS",
+      "result": "MAJORITY_AGREE",
+      "note": "Claimed 980 credits after the 20-credit fee."
+    },
+    {
+      "action": "Duplicate UP claim",
+      "hash": "0x1108c3397fbf4a1f81f3aa1e3db4e30ddbd13ae762b51f520f73332b106c42a3",
+      "url": "https://explorer-studio.genlayer.com/tx/0x1108c3397fbf4a1f81f3aa1e3db4e30ddbd13ae762b51f520f73332b106c42a3",
+      "contract": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
+      "market_id": "gold-2026-09-13-20-00-00Z",
+      "status": "FINALIZED",
+      "execution": "ERROR",
+      "result": "MAJORITY_AGREE",
+      "note": "Expected rollback: [EXPECTED] position already claimed."
+    }
+  ],
+  "readbacks": {
+    "arena": {
+      "status": "CLAIMABLE",
+      "finality_status": "FINALIZED",
+      "outcome": "UP",
+      "opening_price": 3360000000,
+      "closing_price": 3361000000,
+      "total_staked": 1000,
+      "fee_amount": 20,
+      "distributable_pool": 980,
+      "claimed_amount": 980,
+      "settlement_attempts": 1
+    },
+    "gate": {
+      "finalized": true,
+      "finalized_at": "2026-09-13T20:16:28.213547Z",
+      "outcome": "UP",
+      "opening_price": 3360000000,
+      "closing_price": 3361000000,
+      "distributable_pool": 980,
+      "fee_amount": 20,
+      "evidence_hash": "sha256:0490a4a26a45a26e5c76ecaba601d67608a24f758d765eb67893184517f55914"
+    },
+    "account": {
+      "owner": "0xdB433ff614bDD1ecE21Aa97221C3E0a7ecf79c92",
+      "demo_balance": 980,
+      "claimed_payouts": 980,
+      "position_count": 2,
+      "total_staked": 1000
+    }
+  },
+  "disclosure": "Predetermined synthetic observations demonstrate the settlement mechanics only. This is not fair competitive trading, real metal ownership, live commodity-price verification, or a mainnet deployment."
+}

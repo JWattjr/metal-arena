@@ -20,7 +20,21 @@ Deployment read-back returned `finality_gate_configured: true`, `market_seconds:
 
 ## Public hosting
 
-The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). The final release deployment was `dpl_6mQPpfQPHtS5fvj2PzcwqAURM9Hr`, built successfully, returned HTTP 200, and rendered the synthetic evidence policy marker. The exact future fixture returned HTTP 200 at [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json).
+The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). The final release deployment is `dpl_B2eC5Dy5afpAoMUuBqRSTX6LjU9N`, built successfully, returned HTTP 200, and rendered the synthetic evidence policy marker. The exact future fixture returned HTTP 200 at [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json).
+
+## Public completed-case proof
+
+The recommended wallet-free entry point is the stable [completed Gold case](https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z). The deployment-scoped [public proof manifest](https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json) is the canonical list of verified deployment, binding, journey, market, accounting, and explorer references. It is intentionally distinct from browser-local transaction history.
+
+Key public links:
+
+- [MetalArena contract](https://explorer-studio.genlayer.com/address/0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25)
+- [SettlementFinalityGate contract](https://explorer-studio.genlayer.com/address/0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254)
+- [Settlement receipt](https://explorer-studio.genlayer.com/tx/0xf22b8e9404ea0eb9b237c1203084daeec1a0036b42186d75f4a8734b86051edc)
+- [UP payout receipt](https://explorer-studio.genlayer.com/tx/0x05f92b9a6a0b307838d212b0ccc73df4a63833c87ab1cd842295c3af36273b6a)
+- [Expected duplicate-claim rollback](https://explorer-studio.genlayer.com/tx/0x1108c3397fbf4a1f81f3aa1e3db4e30ddbd13ae762b51f520f73332b106c42a3)
+
+Public read-only RPC receipt checks confirmed all 11 deployment, binding, and recorded-journey transactions in the manifest are finalized: 10 have successful execution and the duplicate claim finalized with the expected `position already claimed` error. The selected market, arena and gate addresses, finality read-back, evidence hash, pool accounting, and final account read-back match the manifest.
 
 Fixture hashes currently covered by the repository tests:
 
@@ -64,7 +78,9 @@ The production page was opened in the Codex in-app browser after deployment. The
 - `Synthetic evidence policy is active` and the configured `Testnet prototype` marker;
 - on-chain `Market history · 1` with a selectable Gold row for the exact 20:00 interval;
 - the Gold fixture source link, exact opening/closing observations, and `FINALIZED` finality;
-- `Unavailable · no transaction reference recorded` when no wallet session had locally recorded a transaction, rather than a preview placeholder on the deployed page.
+- the deployment-scoped public settlement, payout, and expected duplicate-claim links, even when no wallet session has locally recorded a transaction; browser-local references remain separately labeled.
+
+The configured release does not offer an unsupported `open_next_market` path. The completed Gold case is the supported demo entry point; another hosted interval is not presented until matching evidence is published.
 
 ## Source assessment and readiness
 

@@ -45,6 +45,12 @@ The deployment script deploys and binds both contracts, waits for finalized rece
 
 The fresh StudioNet pair is recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The controlled Gold interval used the exact future fixture `gold-2026-09-13-20-00-00Z`, completed the real 20:00–20:15 UTC window, settled through validator consensus, passed the separate finality gate, paid the UP claim, and rejected a duplicate claim. The production console is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app).
 
+## Public completed-case proof
+
+Open the recorded Gold case without a wallet at [`https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z`](https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z). The deployment-scoped public proof manifest is [`metal-arena-gold-case.json`](https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json); it contains the verified market, accounting, deployed addresses, and public explorer links for settlement, payout, and the expected duplicate-claim rollback. This public proof is separate from browser-local transaction history.
+
+The configured hosted release does not invite users to open unsupported new fixture intervals. A new market requires matching published evidence; preview controls are only available in an unconfigured local build.
+
 ## Readiness verdict
 
 - Synthetic prototype: **YES** — fresh contracts, guarded lifecycle, on-chain paginated history, selectable historical positions, bounded settlement/finality polling, public fixture hosting, and a recorded full Gold journey are complete.
