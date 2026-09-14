@@ -204,7 +204,7 @@ function credits(value: string | number | bigint | undefined | null) {
   return integerValue(value).toLocaleString("en-US");
 }
 
-function price(value: string | number | bigint | undefined | null, scale = 1_000_000, fallback = "—") {
+function price(value: string | number | bigint | undefined | null, scale = 1_000_000, fallback = "—", fixedFractionDigits?: number) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "number" && scale === 1) {
     return Number.isFinite(value) ? `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fallback;
@@ -214,8 +214,11 @@ function price(value: string | number | bigint | undefined | null, scale = 1_000
     const divisor = BigInt(scale);
     const whole = raw / divisor;
     const fraction = raw % divisor;
-    const fractionText = fraction.toString().padStart(6, "0").replace(/0+$/, "");
-    return `$${whole.toLocaleString("en-US")}${fractionText ? `.${fractionText}` : ""}`;
+    const fractionText = fraction.toString().padStart(6, "0");
+    const displayedFraction = fixedFractionDigits === undefined
+      ? fractionText.replace(/0+$/, "")
+      : fractionText.slice(0, fixedFractionDigits).padEnd(fixedFractionDigits, "0");
+    return `$${whole.toLocaleString("en-US")}${displayedFraction ? `.${displayedFraction}` : ""}`;
   } catch {
     return fallback;
   }
@@ -649,15 +652,15 @@ function proofAddressHref(proof: PublicProofManifest, address: string) {
 function CaseProofSummary({ proof, market }: { proof: PublicProofManifest | null; market: MarketRecord }) {
   if (!proof || proof.market_id !== market.market_id) return null;
   const scale = Number(integerValue(proof.source_policy.price_scale)) || Number(integerValue(proof.market.price_scale)) || 1_000_000;
-  const opening = price(proof.market.opening_price, scale);
-  const closing = price(proof.market.closing_price, scale);
+  const opening = price(proof.market.opening_price, scale, "—", 2);
+  const closing = price(proof.market.closing_price, scale, "—", 2);
   const direction = proof.market.outcome === "UP" ? "closing observation is above opening" : proof.market.outcome === "DOWN" ? "closing observation is below opening" : "boundary observations are equal or the pool is refundable";
   return (
     <div className="case-proof">
       <div className="detail-line"><span>Case designation</span><span className="detail-value amber">Historical replay · synthetic</span></div>
       <div className="case-proof-grid">
         <div className="detail-line"><span>Question</span><span className="detail-value">End price &gt; start price?</span></div>
-        <div className="detail-line"><span>Source policy</span><span className="detail-value">{proof.source_policy.revision} · {proof.source_policy.selection_rule} · max gap {proof.source_policy.max_gap_seconds}s</span></div>
+        <div className="detail-line"><span>Source policy</span><span className="detail-value">{proof.source_policy.revision} · {proof.source_policy.selection_rule} · max gap {proof.source_policy.max_gap_seconds}s · fixed point {credits(proof.source_policy.price_scale)} USD/troy oz</span></div>
         <div className="detail-line"><span>Failure policy</span><span className="detail-value">Bad/missing/conflicting evidence stays pending · {proof.source_policy.settlement_grace_seconds}s deadline refund · finality-gated claim</span></div>
         <div className="detail-line"><span>Accepted observations</span><span className="detail-value">{opening} → {closing}</span></div>
         <div className="detail-line"><span>Deterministic result</span><span className="detail-value green">{proof.market.outcome} · {direction}</span></div>
@@ -675,8 +678,8 @@ function EvidencePanel({ metal, market, protocol, configured, txReferences, proo
   if (!market) {
     return <section className="panel full-width"><div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Public settlement record</div><span className="panel-label">select a market</span></div><div className="empty-state"><FileCheck2 size={18} /><h3>No on-chain market selected</h3><p>Open a market or choose one from the paginated history to inspect evidence and transaction references.</p></div></section>;
   }
-  const opening = integerValue(market.opening_price) > 0n ? price(market.opening_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
-  const closing = integerValue(market.closing_price) > 0n ? price(market.closing_price, Number(integerValue(market.price_scale)) || 1_000_000) : "Awaiting evidence";
+  const opening = integerValue(market.opening_price) > 0n ? price(market.opening_price, Number(integerValue(market.price_scale)) || 1_000_000, "Awaiting evidence", 2) : "Awaiting evidence";
+  const closing = integerValue(market.closing_price) > 0n ? price(market.closing_price, Number(integerValue(market.price_scale)) || 1_000_000, "Awaiting evidence", 2) : "Awaiting evidence";
   const marketTransaction = transactionForMarket(txReferences, market.market_id);
   return (
     <section className="panel full-width">
