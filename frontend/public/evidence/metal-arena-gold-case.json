@@ -2,6 +2,7 @@
   "schema_version": "metal-arena-public-proof-v1",
   "manifest_id": "metal-arena-studionet-gold-2026-09-13-20-00-00Z",
   "verified_at": "2026-09-14",
+  "designation": "HISTORICAL_REPLAY_SYNTHETIC",
   "network": "GenLayer StudioNet",
   "chain_id": 61999,
   "rpc_url": "https://studio.genlayer.com/api",
@@ -11,6 +12,16 @@
   "arena_address": "0x8a583769Ab90bD7B2ad5689EA7Ded3EFe5818B25",
   "finality_gate_address": "0xD4Dc9acFdE859Ca8b2c3D37d2d63630e3ef49254",
   "market_id": "gold-2026-09-13-20-00-00Z",
+  "source_policy": {
+    "revision": "synthetic-boundary-v1",
+    "description": "Predetermined public JSON observations demonstrate settlement mechanics only; they are not live or independently verified commodity prices.",
+    "selection_rule": "exact_boundary_observation",
+    "max_gap_seconds": 0,
+    "price_scale": 1000000,
+    "settlement_grace_seconds": 300,
+    "validator_behavior": "Validators independently retrieve the frozen evidence URL. Missing, malformed, stale, conflicting, oversized, or schema-mismatched evidence stays pending; deadline expiry refunds without a fee and still requires matching finality.",
+    "provenance": "Operator-supplied synthetic fixture; public RPC receipts and deployed contract/gate read-backs are independently verifiable."
+  },
   "market": {
     "metal": "GOLD",
     "instrument": "SYNTHETIC-XAUUSD-SPOT",

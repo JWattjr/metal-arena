@@ -4,7 +4,7 @@ MetalArena is a compact GenLayer testnet prototype for 15-minute Gold and Silver
 
 The core distinction is adjudication. The frontend never chooses a winner. After the exact interval ends, validators independently fetch the frozen evidence URL and verify a strict canonical record. The contract then performs deterministic fixed-point comparison and integer pool math. The separate `SettlementGate` contract records finality, and claims are rejected until that record exists.
 
-Current source policy: public synthetic JSON fixtures served from `https://metal-arena.vercel.app/evidence/`. This is deliberate and visible in the UI. It is not live market data. The repository does not invent live prices, trading volume, trader counts, or profits. Replacing it with a real source requires a documented check of exact boundary history, spot/futures semantics, validator access, rate limits, and redistribution licensing.
+Current source policy: public synthetic JSON fixtures served from `https://metal-arena.vercel.app/evidence/`. This is deliberate and visible in the UI. It is not live market data. The time-boxed external-source investigation and concrete access gaps are recorded in [`docs/EXTERNAL_SOURCE_RESEARCH.md`](docs/EXTERNAL_SOURCE_RESEARCH.md). The repository does not invent live prices, trading volume, trader counts, or profits. Replacing it with a real source requires a documented check of exact boundary history, spot/futures semantics, validator access, rate limits, and redistribution licensing.
 
 ## Run locally
 
@@ -30,7 +30,7 @@ npm run typecheck
 npm run build
 ```
 
-The direct suite covers UP, DOWN, equal-price refund, one-sided refund, cutoff rejection, missing evidence, conflicting timestamps, idempotent settlement, finality idempotency/conflict, shared Silver metadata, position pagination within one market, filtered market history pagination, overlap prevention, post-deadline deterministic refund, bounded evidence bodies, and bounded evidence prices.
+The direct suite covers UP, DOWN, equal-price refund, one-sided refund, cutoff rejection, missing/malformed evidence, wrong instrument/unit/source, missing or stale boundaries, validator disagreement, idempotent settlement, finality idempotency/conflict, shared Silver metadata, position pagination within one market, filtered market history pagination, overlap prevention, post-deadline deterministic refund, no claim before finality, bounded evidence bodies, and bounded evidence prices.
 
 ## Deploy
 
@@ -50,6 +50,8 @@ The fresh StudioNet pair is recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.m
 Open the recorded Gold case without a wallet at [`https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z`](https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z). The deployment-scoped public proof manifest is [`metal-arena-gold-case.json`](https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json); it contains the verified market, accounting, deployed addresses, and public explorer links for settlement, payout, and the expected duplicate-claim rollback. This public proof is separate from browser-local transaction history.
 
 The configured hosted release does not invite users to open unsupported new fixture intervals. A new market requires matching published evidence; preview controls are only available in an unconfigured local build.
+
+The case page is self-contained for review: it shows the historical-replay designation, frozen source policy, correctly scaled boundary observations, deterministic result and pool accounting, network and deployed addresses, finality-gate read-back, public receipts, and the distinction between operator-supplied synthetic payloads and independently readable chain proof.
 
 ## Readiness verdict
 

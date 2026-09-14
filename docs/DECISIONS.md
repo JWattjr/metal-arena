@@ -2,9 +2,9 @@
 
 ## Why synthetic evidence is the shipped mode
 
-The prototype needs exact 15-minute boundary observations, while the public sources checked during the release window did not provide a suitable validator-accessible feed. [LBMA Precious Metal Prices](https://www.lbma.org.uk/prices-and-data/lbma-precious-metal-prices) describes benchmark publication/access constraints, while [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/) exposes gold/silver historical products at daily, weekly, and monthly intervals and requires a key. A fabricated live feed would hide the most important settlement risk, so the app labels all fixtures and keeps the source policy explicit.
+The prototype needs exact 15-minute boundary observations, while the public sources checked during the release window did not provide a suitable validator-accessible feed. [LBMA](https://www.lbma.org.uk/prices-and-data/about-lbma-daily-auction-prices) is twice daily and delayed, [Alpha Vantage](https://www.alphavantage.co/documentation/) requires a key and exposes Gold/Silver history at daily, weekly, and monthly intervals, [goldprice.dev](https://goldprice.dev/docs/api-reference) gates 15-minute bars behind Pro, and [XAUS](https://xaus.com/api/) returns an operator-sampled indicative series that disclaims settlement or contractual valuation. The actual requests and responses are recorded in [`EXTERNAL_SOURCE_RESEARCH.md`](EXTERNAL_SOURCE_RESEARCH.md). A fabricated live feed would hide the most important settlement risk, so the app labels all fixtures and keeps the source policy explicit.
 
-The upgrade path is to replace the frozen source policy only after confirming: exact boundary or an approved max-gap selection rule, spot versus futures semantics, historical retention, validator access, redistribution rights, and rate limits.
+The upgrade path is to replace the frozen source policy only after confirming: exact boundary or an approved max-gap selection rule, spot versus futures semantics, historical retention, validator access, independently verifiable provenance, redistribution rights, and rate limits. Until then, no external quote is silently converted into a settlement fixture.
 
 ## Why demo credits
 

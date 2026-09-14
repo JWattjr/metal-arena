@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from tests.direct.conftest import as_address, evidence_payload, market_id
 
 
@@ -152,6 +154,100 @@ def test_conflicting_timestamp_is_pending(wired_arena, direct_vm, direct_alice):
     assert arena.get_market(market)["outcome"] == ""
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("instrument", "SYNTHETIC-XAGUSD-SPOT"),
+        ("unit", "USD_PER_GRAM"),
+        ("source_id", "unapproved-external-source"),
+    ],
+)
+def test_external_identity_mismatch_is_pending_not_substituted(
+    wired_arena, direct_vm, direct_alice, field, value
+):
+    arena, _gate = wired_arena
+    market = open_gold(arena, direct_vm)
+    fund_and_stake(arena, direct_vm, direct_alice, market, "UP", 100)
+    payload = evidence_payload(market, "2025-01-01T00:15:00Z", "2025-01-01T00:30:00Z")
+    payload[field] = value
+    direct_vm.mock_web(rf".*{market}\.json$", {"status": 200, "body": json.dumps(payload)})
+    direct_vm.warp("2025-01-01T00:30:00Z")
+    direct_vm.sender = direct_alice
+
+    arena.request_settlement(market)
+
+    detail = arena.get_market(market)
+    assert detail["settlement_state"] == "PENDING_EVIDENCE"
+    assert detail["last_reason_code"] == "INVALID_SCHEMA"
+    assert detail["outcome"] == ""
+
+
+def test_malformed_external_response_is_pending(wired_arena, direct_vm, direct_alice):
+    arena, _gate = wired_arena
+    market = open_gold(arena, direct_vm)
+    fund_and_stake(arena, direct_vm, direct_alice, market, "DOWN", 100)
+    direct_vm.mock_web(rf".*{market}\.json$", {"status": 200, "body": "{not-json"})
+    direct_vm.warp("2025-01-01T00:30:00Z")
+    direct_vm.sender = direct_alice
+
+    arena.request_settlement(market)
+
+    detail = arena.get_market(market)
+    assert detail["settlement_state"] == "PENDING_EVIDENCE"
+    assert detail["last_reason_code"] == "MALFORMED_JSON"
+    assert detail["outcome"] == ""
+
+
+@pytest.mark.parametrize(
+    ("opening_timestamp", "closing_timestamp"),
+    [
+        ("", "2025-01-01T00:30:00Z"),
+        ("2025-01-01T00:14:00Z", "2025-01-01T00:30:00Z"),
+        ("2025-01-01T00:15:00Z", "2025-01-01T00:29:00Z"),
+    ],
+)
+def test_missing_or_stale_boundary_is_pending(
+    wired_arena, direct_vm, direct_alice, opening_timestamp, closing_timestamp
+):
+    arena, _gate = wired_arena
+    market = open_gold(arena, direct_vm)
+    fund_and_stake(arena, direct_vm, direct_alice, market, "UP", 100)
+    payload = evidence_payload(market, opening_timestamp, closing_timestamp)
+    direct_vm.mock_web(rf".*{market}\.json$", {"status": 200, "body": json.dumps(payload)})
+    direct_vm.warp("2025-01-01T00:30:00Z")
+    direct_vm.sender = direct_alice
+
+    arena.request_settlement(market)
+
+    detail = arena.get_market(market)
+    assert detail["settlement_state"] == "PENDING_EVIDENCE"
+    assert detail["last_reason_code"] == "INVALID_SCHEMA"
+    assert detail["outcome"] == ""
+
+
+def test_validator_disagreement_stays_pending(monkeypatch, wired_arena, direct_vm, direct_alice):
+    arena, _gate = wired_arena
+    market = open_gold(arena, direct_vm)
+    fund_and_stake(arena, direct_vm, direct_alice, market, "UP", 100)
+    payload = evidence_payload(market, "2025-01-01T00:15:00Z", "2025-01-01T00:30:00Z")
+    direct_vm.mock_web(rf".*{market}\.json$", {"status": 200, "body": json.dumps(payload)})
+    direct_vm.warp("2025-01-01T00:30:00Z")
+    direct_vm.sender = direct_alice
+
+    import genlayer.gl as gl
+
+    def disagree(*_args, **_kwargs):
+        raise RuntimeError("simulated validator disagreement")
+
+    monkeypatch.setattr(gl.vm, "run_nondet_unsafe", disagree)
+    arena.request_settlement(market)
+
+    detail = arena.get_market(market)
+    assert detail["settlement_state"] == "PENDING_EVIDENCE"
+    assert detail["last_reason_code"] == "CONFLICTING_EVIDENCE"
+    assert detail["outcome"] == ""
+
+
 def test_settlement_is_idempotent_after_outcome(wired_arena, direct_vm, direct_alice):
     arena, _gate = wired_arena
     market = open_gold(arena, direct_vm)
@@ -234,6 +330,26 @@ def test_request_after_deadline_always_refunds_without_an_evidence_attempt(
     assert detail["last_reason_code"] == "SETTLEMENT_DEADLINE_REFUND"
     assert detail["settlement_attempts"] == 0
     assert detail["fee_amount"] == 0
+
+
+def test_deadline_refund_cannot_pay_before_matching_finality(
+    wired_arena, direct_vm, direct_alice
+):
+    arena, _gate = wired_arena
+    market = open_gold(arena, direct_vm)
+    fund_and_stake(arena, direct_vm, direct_alice, market, "UP", 100)
+    direct_vm.warp("2025-01-01T00:35:00Z")
+    direct_vm.sender = direct_alice
+
+    arena.refund_after_deadline(market)
+
+    assert arena.get_market(market)["outcome"] == "REFUND"
+    with direct_vm.expect_revert("finality gate"):
+        arena.claim(market, "UP")
+    position = arena.get_position(market, as_address(direct_alice), "UP")
+    assert position["claimed"] is False
+    assert position["payout"] == 0
+    assert arena.get_market(market)["claimed_amount"] == 0
 
 
 def test_oversized_evidence_body_stays_pending(wired_arena, direct_vm, direct_alice):

@@ -24,7 +24,7 @@ The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.v
 
 ## Public completed-case proof
 
-The recommended wallet-free entry point is the stable [completed Gold case](https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z). The deployment-scoped [public proof manifest](https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json) is the canonical list of verified deployment, binding, journey, market, accounting, and explorer references. It is intentionally distinct from browser-local transaction history.
+The recommended wallet-free entry point is the stable [completed Gold case](https://metal-arena.vercel.app/?case=gold-2026-09-13-20-00-00Z). The rendered case page is self-contained: it shows the historical-replay designation, frozen `synthetic-boundary-v1` policy, correctly scaled `$3,360.00 → $3,361.00` observations, deterministic `UP` result, pool accounting, network, deployed addresses, finality-gate read-back, and public receipts. The deployment-scoped [public proof manifest](https://metal-arena.vercel.app/evidence/metal-arena-gold-case.json) is the canonical machine-readable list of verified deployment, binding, journey, market, accounting, and explorer references. It is intentionally distinct from browser-local transaction history.
 
 Key public links:
 
@@ -35,6 +35,12 @@ Key public links:
 - [Expected duplicate-claim rollback](https://explorer-studio.genlayer.com/tx/0x1108c3397fbf4a1f81f3aa1e3db4e30ddbd13ae762b51f520f73332b106c42a3)
 
 Public read-only RPC receipt checks confirmed all 11 deployment, binding, and recorded-journey transactions in the manifest are finalized: 10 have successful execution and the duplicate claim finalized with the expected `position already claimed` error. The selected market, arena and gate addresses, finality read-back, evidence hash, pool accounting, and final account read-back match the manifest.
+
+## Failure and refund evidence
+
+The direct suite now covers valid UP/DOWN outcomes, wrong instrument/unit/source identity, malformed responses, missing or stale boundary observations, oversized/out-of-range evidence, simulated validator disagreement, post-deadline refund, and the rule that a refund cannot be claimed before the matching finality gate record. These are controlled local consensus-boundary tests, not claims about live market data.
+
+No additional hosted testnet failure market was opened: doing so would require an unsupported new fixture interval without matching public evidence. The existing Gold case remains the only public completed market, and the failure/refund behavior is demonstrated conservatively by the focused tests.
 
 Fixture hashes currently covered by the repository tests:
 
@@ -84,6 +90,6 @@ The configured release does not offer an unsupported `open_next_market` path. Th
 
 ## Source assessment and readiness
 
-The source check was time-boxed. [LBMA Precious Metal Prices](https://www.lbma.org.uk/prices-and-data/lbma-precious-metal-prices) documents benchmark publication/access constraints and does not provide the exact public 15-minute historical feed required here. [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/) exposes gold/silver spot/history at daily, weekly, and monthly intervals and requires an API key. No suitable public, validator-accessible exact 15-minute historical source was found within the release window, so synthetic evidence remains explicit.
+The source check was time-boxed and is documented in [`EXTERNAL_SOURCE_RESEARCH.md`](EXTERNAL_SOURCE_RESEARCH.md). Actual requests found that [LBMA](https://www.lbma.org.uk/prices-and-data/about-lbma-daily-auction-prices) is twice daily and delayed, [Alpha Vantage](https://www.alphavantage.co/documentation/) requires a key and exposes Gold/Silver historical data at daily, weekly, and monthly intervals, [goldprice.dev](https://goldprice.dev/docs/api-reference) gates 15-minute bars behind Pro, and [XAUS](https://xaus.com/api/) exposes an operator-sampled indicative series that explicitly disclaims settlement or contractual valuation. No suitable public, validator-accessible exact 15-minute historical source was found, so synthetic evidence remains explicit.
 
 Final verdict: **synthetic prototype YES; real-price trading ready NO**.

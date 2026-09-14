@@ -1247,6 +1247,18 @@ a {
   border-top: 1px solid rgba(42, 51, 54, 0.72);
 }
 
+.case-proof {
+  margin-top: 16px;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(42, 51, 54, 0.72);
+}
+
+.case-proof-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .proof-links {
   display: flex;
   flex-wrap: wrap;

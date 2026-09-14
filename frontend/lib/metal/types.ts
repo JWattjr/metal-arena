@@ -131,6 +131,7 @@ export type PublicProofManifest = {
   schema_version: string;
   manifest_id: string;
   verified_at: string;
+  designation: string;
   network: string;
   chain_id: string | number;
   rpc_url: string;
@@ -140,6 +141,16 @@ export type PublicProofManifest = {
   arena_address: string;
   finality_gate_address: string;
   market_id: string;
+  source_policy: {
+    revision: string;
+    description: string;
+    selection_rule: string;
+    max_gap_seconds: string | number;
+    price_scale: string | number;
+    settlement_grace_seconds: string | number;
+    validator_behavior: string;
+    provenance: string;
+  };
   market: {
     metal: Metal;
     instrument: string;
@@ -154,6 +165,9 @@ export type PublicProofManifest = {
     price_scale: string | number;
     outcome: string;
     finality_status: string;
+    settlement_state?: string;
+    settlement_attempts?: string | number;
+    finalized_at?: string;
   };
   accounting: {
     up_pool: string | number;

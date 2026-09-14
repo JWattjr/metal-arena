@@ -206,7 +206,9 @@ function credits(value: string | number | bigint | undefined | null) {
 
 function price(value: string | number | bigint | undefined | null, scale = 1_000_000, fallback = "—") {
   if (value === undefined || value === null || value === "") return fallback;
-  if (typeof value === "number") return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (typeof value === "number" && scale === 1) {
+    return Number.isFinite(value) ? `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fallback;
+  }
   try {
     const raw = integerValue(value);
     const divisor = BigInt(scale);
@@ -640,6 +642,35 @@ function PublicProofLinks({ proof, proofError, marketId }: { proof: PublicProofM
   );
 }
 
+function proofAddressHref(proof: PublicProofManifest, address: string) {
+  return `${proof.explorer_base_url.replace(/tx\/?$/, "address/")}${address}`;
+}
+
+function CaseProofSummary({ proof, market }: { proof: PublicProofManifest | null; market: MarketRecord }) {
+  if (!proof || proof.market_id !== market.market_id) return null;
+  const scale = Number(integerValue(proof.source_policy.price_scale)) || Number(integerValue(proof.market.price_scale)) || 1_000_000;
+  const opening = price(proof.market.opening_price, scale);
+  const closing = price(proof.market.closing_price, scale);
+  const direction = proof.market.outcome === "UP" ? "closing observation is above opening" : proof.market.outcome === "DOWN" ? "closing observation is below opening" : "boundary observations are equal or the pool is refundable";
+  return (
+    <div className="case-proof">
+      <div className="detail-line"><span>Case designation</span><span className="detail-value amber">Historical replay · synthetic</span></div>
+      <div className="case-proof-grid">
+        <div className="detail-line"><span>Question</span><span className="detail-value">End price &gt; start price?</span></div>
+        <div className="detail-line"><span>Source policy</span><span className="detail-value">{proof.source_policy.revision} · {proof.source_policy.selection_rule} · max gap {proof.source_policy.max_gap_seconds}s</span></div>
+        <div className="detail-line"><span>Failure policy</span><span className="detail-value">Bad/missing/conflicting evidence stays pending · {proof.source_policy.settlement_grace_seconds}s deadline refund · finality-gated claim</span></div>
+        <div className="detail-line"><span>Accepted observations</span><span className="detail-value">{opening} → {closing}</span></div>
+        <div className="detail-line"><span>Deterministic result</span><span className="detail-value green">{proof.market.outcome} · {direction}</span></div>
+        <div className="detail-line"><span>Pool accounting</span><span className="detail-value">UP {credits(proof.accounting.up_pool)} · DOWN {credits(proof.accounting.down_pool)} · fee {credits(proof.accounting.fee_amount)} · payout {credits(proof.accounting.claimed_payout)}</span></div>
+        <div className="detail-line"><span>Network</span><span className="detail-value">{proof.network} · chain {proof.chain_id}</span></div>
+        <div className="detail-line"><span>MetalArena</span><a className="detail-value" href={proofAddressHref(proof, proof.arena_address)} target="_blank" rel="noreferrer">{shortHash(proof.arena_address)} <ExternalLink size={11} /></a></div>
+        <div className="detail-line"><span>Finality gate</span><a className="detail-value" href={proofAddressHref(proof, proof.finality_gate_address)} target="_blank" rel="noreferrer">{shortHash(proof.finality_gate_address)} · finalized{proof.market.finalized_at ? ` · ${timestampLabel(proof.market.finalized_at, true)} UTC` : ""} <ExternalLink size={11} /></a></div>
+      </div>
+      <p className="evidence-copy"><strong>Evidence boundary:</strong> the frozen payload is operator-supplied synthetic demonstration data. The public RPC receipts, contract state, gate record, and accounting are independently readable; validators independently retrieved and agreed on this exact payload for the recorded settlement.</p>
+    </div>
+  );
+}
+
 function EvidencePanel({ metal, market, protocol, configured, txReferences, proof, proofError }: { metal: Metal; market: MarketRecord | null; protocol: ProtocolConfig | null; configured: boolean; txReferences: TxSnapshot[]; proof: PublicProofManifest | null; proofError: string | null }) {
   if (!market) {
     return <section className="panel full-width"><div className="panel-heading"><div className="panel-title"><FileCheck2 size={16} /> Public settlement record</div><span className="panel-label">select a market</span></div><div className="empty-state"><FileCheck2 size={18} /><h3>No on-chain market selected</h3><p>Open a market or choose one from the paginated history to inspect evidence and transaction references.</p></div></section>;
@@ -657,10 +688,12 @@ function EvidencePanel({ metal, market, protocol, configured, txReferences, proo
           <div className="detail-line"><span>Opening observation</span><span className="detail-value">{opening}{market.opening_timestamp ? ` · ${timestampLabel(market.opening_timestamp, true)} UTC` : ""}</span></div>
           <div className="detail-line"><span>Closing observation</span><span className="detail-value">{closing}{market.closing_timestamp ? ` · ${timestampLabel(market.closing_timestamp, true)} UTC` : ""}</span></div>
           <div className="detail-line"><span>Evidence source</span><span className="detail-value"><a href={market.evidence_url} target="_blank" rel="noreferrer">{market.source_id || protocol?.source_id || "Synthetic fixture"} <ExternalLink size={11} /></a></span></div>
+          <div className="detail-line"><span>Evidence hash</span><span className="detail-value hash-value">{market.evidence_hash || "Awaiting evidence"}</span></div>
           <div className="detail-line"><span>Selection rule</span><span className="detail-value">Exact boundary · max gap 0s</span></div>
           <div className="detail-line"><span>Browser-local transaction reference</span><TransactionValue reference={marketTransaction} configured={configured} /></div>
           <div className="detail-line"><span>Finality</span><span className={`detail-value ${market.finality_status === "FINALIZED" ? "green" : "cyan"}`}>{market.finality_status || "Not finalized"}</span></div>
         </div>
+        <CaseProofSummary proof={proof} market={market} />
         <PublicProofLinks proof={proof} proofError={proofError} marketId={market.market_id} />
         <p className="evidence-copy"><strong>Why validators matter:</strong> each validator retrieves the same frozen URL and verifies metal, instrument, currency, unit, timestamps, source identity, and schema. The contract alone compares the accepted fixed-point prices and performs the fee, payout, and refund arithmetic.</p>
       </div>
