@@ -20,7 +20,7 @@ Deployment read-back returned `finality_gate_configured: true`, `market_seconds:
 
 ## Public hosting
 
-The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). The final release deployment is [`dpl_Brw366Rtpo2ZfbyY4nrDiS6ZzLU5`](https://vercel.com/wattxs-projects/metal-arena/Brw366Rtpo2ZfbyY4nrDiS6ZzLU5), built successfully, returned HTTP 200, and rendered the synthetic evidence policy marker. The exact future fixture returned HTTP 200 at [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json).
+The production alias is [`https://metal-arena.vercel.app`](https://metal-arena.vercel.app). The final release deployment is [`dpl_BpsvpmoubGDguRz7t81psnRm4kLC`](https://vercel.com/wattxs-projects/metal-arena/BpsvpmoubGDguRz7t81psnRm4kLC), built successfully, returned HTTP 200, and rendered the synthetic evidence policy marker. The exact future fixture returned HTTP 200 at [`gold-2026-09-13-20-00-00Z.json`](https://metal-arena.vercel.app/evidence/gold-2026-09-13-20-00-00Z.json).
 
 ## Public completed-case proof
 
